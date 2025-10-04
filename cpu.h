@@ -380,6 +380,9 @@ static inline __attribute__((always_inline)) int cpu_step(CPU *cpu) {
 
     goto *dispatch_table[opcode];
 
+invalid_lbl:
+        // Opcode invalide
+        return CPU_ERROR;
 op_nop_lbl:
     op_nop(cpu, mode, operand);
     return CPU_OK;
@@ -436,9 +439,7 @@ op_halt_lbl:
     // HALT instruction
     return CPU_HALT;
 
-invalid_lbl:
-    // Opcode invalide
-    return CPU_ERROR;
+
 }
 
 static inline void cpu_run(CPU *cpu) {
