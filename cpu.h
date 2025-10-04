@@ -583,54 +583,67 @@ invalid_lbl:
         return CPU_ERROR;
 op_nop_lbl:
     op_nop(cpu, mode, operand);
+    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
     return CPU_OK;
 
 op_lda_lbl:
     op_lda(cpu, mode, operand);
+    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
     return CPU_OK;
 
 op_ldx_lbl:
     op_ldx(cpu, mode, operand);
+    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
     return CPU_OK;
 
 op_sta_lbl:
     op_sta(cpu, mode, operand);
+    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
     return CPU_OK;
 
 op_stx_lbl:
     op_stx(cpu, mode, operand);
+    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
     return CPU_OK;
 
 op_add_lbl:
     op_add(cpu, mode, operand);
+    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
     return CPU_OK;
 
 op_sub_lbl:
     op_sub(cpu, mode, operand);
+    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
     return CPU_OK;
 
 op_xor_lbl:
     op_xor(cpu, mode, operand);
+    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
     return CPU_OK;
 
 op_and_lbl:
     op_and(cpu, mode, operand);
+    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
     return CPU_OK;
 
 op_or_lbl:
     op_or(cpu, mode, operand);
+    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
     return CPU_OK;
 
 op_branch_lbl:
     op_branch(cpu, mode, operand);
+    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
     return CPU_OK;
 
 op_pop_lbl:
     op_pop(cpu, mode, operand);
+    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
     return CPU_OK;
 
 op_push_lbl:
     op_push(cpu, mode, operand);
+    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
     return CPU_OK;
 
 op_cmp_lbl:
