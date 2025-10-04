@@ -87,7 +87,7 @@ typedef void (*opcode_handler)(CPU*, uint8_t, uint8_t);
 // OPCODE HANDLERS
 // ============================================================================
 
-static void op_nop(CPU *cpu, uint8_t mode, uint8_t operand) {
+static inline void op_nop(CPU *cpu, uint8_t mode, uint8_t operand) {
     (void)cpu; (void)mode; (void)operand;
 }
 
@@ -108,7 +108,7 @@ static inline void op_lda(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_NEGATIVE;
 }
 
-static void op_ldx(CPU *cpu, uint8_t mode, uint8_t operand) {
+static inline void op_ldx(CPU *cpu, uint8_t mode, uint8_t operand) {
     if (mode == MODE_IMM) {
         cpu->X = operand;
     } else if (mode == MODE_ABS) {
@@ -124,7 +124,7 @@ static void op_ldx(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_NEGATIVE;
 }
 
-static void op_sta(CPU *cpu, uint8_t mode, uint8_t operand) {
+static inline void op_sta(CPU *cpu, uint8_t mode, uint8_t operand) {
     if (mode == MODE_ABS) {
         cpu->memory[operand] = cpu->A;
     } else if (mode == MODE_IDX) {
@@ -133,7 +133,7 @@ static void op_sta(CPU *cpu, uint8_t mode, uint8_t operand) {
     // STA ne modifie pas les flags
 }
 
-static void op_stx(CPU *cpu, uint8_t mode, uint8_t operand) {
+static inline void op_stx(CPU *cpu, uint8_t mode, uint8_t operand) {
     if (mode == MODE_ABS) {
         cpu->memory[operand] = cpu->X;
     } else if (mode == MODE_IDX) {
@@ -142,7 +142,7 @@ static void op_stx(CPU *cpu, uint8_t mode, uint8_t operand) {
     // STX ne modifie pas les flags
 }
 
-static void op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
+static inline void op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value;
     if (mode == MODE_IMM) {
         value = operand;
@@ -170,7 +170,7 @@ static void op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_OVERFLOW;
 }
 
-static void op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
+static inline void op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value;
     if (mode == MODE_IMM) {
         value = operand;
@@ -198,7 +198,7 @@ static void op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_OVERFLOW;
 }
 
-static void op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
+static inline void op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value;
     if (mode == MODE_IMM) {
         value = operand;
@@ -217,7 +217,7 @@ static void op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_NEGATIVE;
 }
 
-static void op_and(CPU *cpu, uint8_t mode, uint8_t operand) {
+static inline void op_and(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value;
     if (mode == MODE_IMM) {
         value = operand;
@@ -236,7 +236,7 @@ static void op_and(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_NEGATIVE;
 }
 
-static void op_or(CPU *cpu, uint8_t mode, uint8_t operand) {
+static inline void op_or(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value;
     if (mode == MODE_IMM) {
         value = operand;
@@ -255,7 +255,7 @@ static void op_or(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_NEGATIVE;
 }
 
-static void op_branch(CPU *cpu, uint8_t condition, uint8_t address) {
+static inline void op_branch(CPU *cpu, uint8_t condition, uint8_t address) {
     int should_branch = 0;
 
     switch(condition) {
@@ -287,7 +287,7 @@ static void op_branch(CPU *cpu, uint8_t condition, uint8_t address) {
     }
 }
 
-static void op_push(CPU *cpu, uint8_t mode, uint8_t operand) {
+static inline void op_push(CPU *cpu, uint8_t mode, uint8_t operand) {
     (void)mode; (void)operand;  // PUSH pousse toujours A
 
     if (cpu->SP < 0xF0) {  // Stack overflow check
@@ -298,7 +298,7 @@ static void op_push(CPU *cpu, uint8_t mode, uint8_t operand) {
     cpu->SP--;
 }
 
-static void op_pop(CPU *cpu, uint8_t mode, uint8_t operand) {
+static inline void op_pop(CPU *cpu, uint8_t mode, uint8_t operand) {
     (void)mode; (void)operand;  // POP dépile toujours vers A
 
     if (cpu->SP >= 0xFF) {  // Stack underflow check
@@ -316,7 +316,7 @@ static void op_pop(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_NEGATIVE;
 }
 
-static void op_halt(CPU *cpu, uint8_t mode, uint8_t operand) {
+static inline void op_halt(CPU *cpu, uint8_t mode, uint8_t operand) {
     (void)cpu; (void)mode; (void)operand;
     // Le flag HALT sera géré dans cpu_step
 }
@@ -340,36 +340,105 @@ static const opcode_handler handlers[16] = {
 };
 
 // CPU initialization
-static inline void initCPU(CPU *cpu) {
+static void initCPU(CPU *cpu) {
     __builtin_memset(cpu, 0, sizeof(CPU));
     cpu->SP = 0xFF;
 }
 
 // cpu_step
-static inline int cpu_step(CPU *cpu) {
-    // if (!cpu) {
-    //     return -1;
-    // }
+static inline __attribute__((always_inline)) int cpu_step(CPU *cpu) {
+    uint8_t opcode;
+    uint8_t mode;
+    uint8_t operand;
 
-    // Fetch
-    uint8_t opcode = cpu->memory[cpu->PC++];
+    // Table de labels pour dispatch rapide (computed goto)
+    static void *dispatch_table[16] = {
+        &&op_nop_lbl,   // 0x00
+        &&op_lda_lbl,   // 0x01
+        &&op_ldx_lbl,   // 0x02
+        &&op_sta_lbl,   // 0x03
+        &&op_stx_lbl,   // 0x04
+        &&op_add_lbl,   // 0x05
+        &&op_sub_lbl,   // 0x06
+        &&op_xor_lbl,   // 0x07
+        &&op_and_lbl,   // 0x08
+        &&op_or_lbl,    // 0x09
+        &&op_branch_lbl,// 0x0A
+        &&op_pop_lbl,   // 0x0B
+        &&op_push_lbl,  // 0x0C
+        &&invalid_lbl,  // 0x0D
+        &&invalid_lbl,  // 0x0E
+        &&op_halt_lbl   // 0x0F
+    };
 
-    // Check HALT
-    // if (opcode == OPCODE_HALT) {
-    //     return CPU_HALT;  // Signal HALT
-    // }
+    opcode = cpu->memory[cpu->PC++];
+    if (opcode >= 16) goto invalid_lbl;
 
-    // Fetch mode et operand
-    uint8_t mode = cpu->memory[cpu->PC++];
-    uint8_t operand = cpu->memory[cpu->PC++];
+    // Lecture groupée mode/operand
+    mode = cpu->memory[cpu->PC++];
+    operand = cpu->memory[cpu->PC++];
 
-    // Execute
-    if (opcode < 16 && handlers[opcode]) {
-        handlers[opcode](cpu, mode, operand);
-        return 0;  // Success
-    }
+    goto *dispatch_table[opcode];
 
-    return -1;  // Invalid opcode
+op_nop_lbl:
+    op_nop(cpu, mode, operand);
+    return CPU_OK;
+
+op_lda_lbl:
+    op_lda(cpu, mode, operand);
+    return CPU_OK;
+
+op_ldx_lbl:
+    op_ldx(cpu, mode, operand);
+    return CPU_OK;
+
+op_sta_lbl:
+    op_sta(cpu, mode, operand);
+    return CPU_OK;
+
+op_stx_lbl:
+    op_stx(cpu, mode, operand);
+    return CPU_OK;
+
+op_add_lbl:
+    op_add(cpu, mode, operand);
+    return CPU_OK;
+
+op_sub_lbl:
+    op_sub(cpu, mode, operand);
+    return CPU_OK;
+
+op_xor_lbl:
+    op_xor(cpu, mode, operand);
+    return CPU_OK;
+
+op_and_lbl:
+    op_and(cpu, mode, operand);
+    return CPU_OK;
+
+op_or_lbl:
+    op_or(cpu, mode, operand);
+    return CPU_OK;
+
+op_branch_lbl:
+    op_branch(cpu, mode, operand);
+    return CPU_OK;
+
+op_pop_lbl:
+    op_pop(cpu, mode, operand);
+    return CPU_OK;
+
+op_push_lbl:
+    op_push(cpu, mode, operand);
+    return CPU_OK;
+
+op_halt_lbl:
+    // HALT instruction
+    return CPU_HALT;
+
+invalid_lbl:
+    // Opcode invalide
+    return CPU_ERROR;
 }
 
 static inline void cpu_run(CPU *cpu) {
