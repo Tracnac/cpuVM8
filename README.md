@@ -25,11 +25,11 @@ MODE_ABS = 0x01,  // Absolu:    address
 MODE_IDX = 0x02,  // Indexé:    address,X
 ```
 
-## Architecture et approche C
-- **Registres** : Accumulateur (A), registre d’index (X), compteur de programme (PC), pointeur de pile (SP), flags de statuts (SR).
-- **Mémoire** : 256 octets, adressées via un tableau.
-- **Instructions** : Chaque opcode est associé à une fonction handler en C via un pointeur de fonction.
-- **Structure CPU** : Tout est regroupé dans une structure C :
+## Architecture et approche C
+- **Registres:** Accumulateur (A), registre d’index (X), compteur de programme (PC), pointeur de pile (SP), flags de statuts (SR).
+- **Mémoire:** 256 octets, adressées via un tableau.
+- **Instructions:** Chaque opcode est associé à une fonction handler en C via un pointeur de fonction.
+- **Structure CPU:** Tout est regroupé dans une structure C :
 
 ```c
 typedef struct {
