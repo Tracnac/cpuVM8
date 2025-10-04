@@ -10,7 +10,6 @@ CFLAGS = -std=c11 -Wall -Wextra -Wpedantic -g -O0 \
 LEAK_ENV = MallocStackLogging=1 ASAN_OPTIONS=detect_leaks=1
 LDFLAGS =
 else
-# CFLAGS = -Wall -Wextra -O3 -march=native -flto -pipe
 CFLAGS = -O3 -march=native -mtune=native -flto -pipe -fomit-frame-pointer \
          -funroll-loops -finline-functions
 LEAK_ENV =
@@ -21,7 +20,13 @@ endif
 CFLAGS += -MMD -MP
 
 # Sources (update if you add/remove .c files)
-SRCS = cpu.c cpuvm8.c
+# Split sources into library (no main) and app (contains main) so tests
+# can link only the library objects and avoid duplicate `main` symbols.
+APP_SRCS = cpuvm8.c
+
+LIB_SRCS = cpu.c
+SRCS = $(LIB_SRCS) $(APP_SRCS)
+
 BUILD_DIR = build
 OBJ_DIR = $(BUILD_DIR)/obj
 BIN_DIR = $(BUILD_DIR)/bin
@@ -31,7 +36,27 @@ DEPS = $(patsubst %.c,$(OBJ_DIR)/%.d,$(SRCS))
 
 TARGET = $(BIN_DIR)/cpuvm8
 
-.PHONY: all clean test
+# --- TESTS AUTOMATION ---
+# Find all test source files matching *_test.c
+TEST_SRCS := $(wildcard tests/*_test.c)
+TEST_OBJS := $(patsubst tests/%.c,$(OBJ_DIR)/%.o,$(TEST_SRCS))
+
+UNITY_SRC = tests/unity/unity.c
+UNITY_OBJ = $(OBJ_DIR)/unity.o
+
+# Add main test runner object (assumed to be cpuVM8_test.c)
+
+TEST_RUNNER_OBJ = $(OBJ_DIR)/cpuVM8_test.o
+
+# Add source objects needed for tests: only library sources (no main)
+SRC_OBJS = $(patsubst %.c,$(OBJ_DIR)/%.o,$(LIB_SRCS))
+
+TEST_BIN = $(BIN_DIR)/cpuVM8_test
+
+# Include auto-generated header dependency files (if present)
+-include $(DEPS)
+
+.PHONY: all clean run tests
 
 all: $(TARGET)
 
@@ -47,11 +72,23 @@ $(TARGET): $(OBJS) | $(BIN_DIR)
 $(OBJ_DIR)/%.o: %.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-# Include auto-generated header dependency files (if present)
--include $(DEPS)
+# Compile test sources
+$(OBJ_DIR)/%.o: tests/%.c | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+# Compile Unity
+$(OBJ_DIR)/unity.o: $(UNITY_SRC) | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+# Link all test objects, Unity, and source objects into test binary
+$(TEST_BIN): $(TEST_RUNNER_OBJ) $(TEST_OBJS) $(SRC_OBJS) $(UNITY_OBJ) | $(BIN_DIR)
+	$(CC) $(LDFLAGS) -o $@ $^
 
 clean:
 	rm -rf $(BUILD_DIR)
 
-test: $(TARGET)
-	$(LEAK_ENV) ./$(TARGET) cartridge.bin
+run: $(TARGET)
+	$(LEAK_ENV) ./$(TARGET) 8
+
+tests: $(TEST_BIN)
+	./$(TEST_BIN)
