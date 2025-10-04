@@ -15,7 +15,7 @@
 enum { CPU_ERROR = -1, CPU_OK = 0, CPU_HALT = 1 };
 
 // Memory layout
-enum { CODE_BASE = 0x0, STACK_BASE = 0xFF, STACK_SIZE=2, MAX_MEMORY_SIZE = 256 };
+enum { CODE_BASE = 0x0, STACK_BASE = 0xFF, STACK_SIZE=16, MAX_MEMORY_SIZE = 256 };
 
 // Registers
 enum {
@@ -133,14 +133,8 @@ static void op_ldx(CPU *cpu, uint8_t mode, uint8_t operand) {
         case MODE_ABSOLUTE:
             cpu->X = cpu->memory[operand];
             break;
-        case MODE_INDEXED_X:
-            cpu->X = cpu->memory[(operand + cpu->X) & 0xFF];
-            break;
         case MODE_INDIRECT:
             cpu->X = cpu->memory[cpu->memory[operand]];
-            break;
-        case MODE_INDIRECT_INDEXED_X:
-            cpu->X = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
             break;
         default:
             cpu->flags |= FLAG_ERROR;
@@ -180,14 +174,8 @@ static void op_stx(CPU *cpu, uint8_t mode, uint8_t operand) {
         case MODE_ABSOLUTE:
             cpu->memory[operand] = cpu->X;
             break;
-        case MODE_INDEXED_X:
-            cpu->memory[(operand + cpu->X) & 0xFF] = cpu->X;
-            break;
         case MODE_INDIRECT:
             cpu->memory[cpu->memory[operand]] = cpu->X;
-            break;
-        case MODE_INDIRECT_INDEXED_X:
-            cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]] = cpu->X;
             break;
         default:
             cpu->flags |= FLAG_ERROR;
@@ -219,6 +207,7 @@ static void op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
             return;
     }
 
+    uint8_t original_A = cpu->A;  // Save original A value for overflow check
     uint16_t result = cpu->A + value;
     cpu->A = result & 0xFF;
 
@@ -233,7 +222,7 @@ static void op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_CARRY;
 
     // Overflow: signes identiques donnent résultat de signe différent
-    if (((cpu->A ^ value) & 0x80) == 0 && ((cpu->A ^ result) & 0x80) != 0)
+    if (((original_A ^ value) & 0x80) == 0 && ((original_A ^ cpu->A) & 0x80) != 0)
         cpu->flags |= FLAG_OVERFLOW;
 }
 
@@ -260,6 +249,7 @@ static void op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
             return;
     }
 
+    uint8_t original_A = cpu->A;  // Save original A value for overflow check
     uint16_t result = cpu->A - value;
     cpu->A = result & 0xFF;
 
@@ -273,8 +263,8 @@ static void op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
     if (result < 0x100)  // Pas de borrow
         cpu->flags |= FLAG_CARRY;
 
-    // Overflow pour soustraction
-    if (((cpu->A ^ value) & 0x80) != 0 && ((cpu->A ^ result) & 0x80) != 0)
+    // Overflow pour soustraction: operands have different signs and result has different sign from minuend
+    if (((original_A ^ value) & 0x80) != 0 && ((original_A ^ cpu->A) & 0x80) != 0)
         cpu->flags |= FLAG_OVERFLOW;
 }
 
@@ -486,10 +476,10 @@ static void op_cpx(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_OVERFLOW;
 }
 
-static inline void op_push(CPU *cpu, uint8_t mode, uint8_t operand) {
+static void op_push(CPU *cpu, uint8_t mode, uint8_t operand) {
     (void)mode; (void)operand;  // PUSH pousse toujours A
 
-    if (cpu->SP < (STACK_BASE - STACK_SIZE)) {  // Stack overflow check
+    if (cpu->SP < (STACK_BASE - STACK_SIZE + 1)) {  // Stack overflow check
         cpu->flags |= FLAG_ERROR;
         return;
     }
@@ -537,6 +527,8 @@ static const opcode_handler handlers[16] = {
     [OPCODE_B]    = op_branch,
     [OPCODE_POP]  = op_pop,
     [OPCODE_PUSH] = op_push,
+    [OPCODE_CMP]  = op_cmp,
+    [OPCODE_CPX]  = op_cpx,
     [OPCODE_HALT] = op_halt,
 };
 
@@ -574,6 +566,11 @@ static inline __attribute__((always_inline)) int cpu_step(CPU *cpu) {
 
     opcode = cpu->memory[cpu->PC++];
     if (opcode >= 16) goto invalid_lbl;
+
+    // Check HALT
+    if (opcode == OPCODE_HALT) {
+        return CPU_HALT;  // Signal HALT
+    }
 
     // Lecture groupée mode/operand
     mode = cpu->memory[cpu->PC++];
