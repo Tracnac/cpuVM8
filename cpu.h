@@ -85,17 +85,18 @@ typedef struct {
 } CPU __attribute__((aligned(64)));
 
 // Définir les handlers pour chaque opcode
-typedef void (*opcode_handler)(CPU*, uint8_t, uint8_t);
+typedef int (*opcode_handler)(CPU*, uint8_t, uint8_t);
 
 // ============================================================================
 // OPCODE HANDLERS
 // ============================================================================
 
-static inline void op_nop(CPU *cpu, uint8_t mode, uint8_t operand) {
+static inline int op_nop(CPU *cpu, uint8_t mode, uint8_t operand) {
     (void)cpu; (void)mode; (void)operand;
+    return CPU_OK;
 }
 
-static inline void op_lda(CPU *cpu, uint8_t mode, uint8_t operand) {
+static inline int op_lda(CPU *cpu, uint8_t mode, uint8_t operand) {
     switch (mode) {
         case MODE_IMMEDIAT:
             cpu->A = operand;
@@ -114,7 +115,7 @@ static inline void op_lda(CPU *cpu, uint8_t mode, uint8_t operand) {
             break;
         default:
             cpu->flags |= FLAG_ERROR;
-            return;
+            return CPU_ERROR;
     }
 
     // Update flags Zero et Sign
@@ -123,9 +124,10 @@ static inline void op_lda(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_ZERO;
     if (cpu->A & 0x80)
         cpu->flags |= FLAG_NEGATIVE;
+    return CPU_OK;
 }
 
-static void op_ldx(CPU *cpu, uint8_t mode, uint8_t operand) {
+static int op_ldx(CPU *cpu, uint8_t mode, uint8_t operand) {
     switch (mode) {
         case MODE_IMMEDIAT:
             cpu->X = operand;
@@ -138,17 +140,19 @@ static void op_ldx(CPU *cpu, uint8_t mode, uint8_t operand) {
             break;
         default:
             cpu->flags |= FLAG_ERROR;
-            return;
+            return CPU_ERROR;
     }
 
+    // Update flags Zero et Sign
     cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);
     if (cpu->X == 0)
         cpu->flags |= FLAG_ZERO;
     if (cpu->X & 0x80)
         cpu->flags |= FLAG_NEGATIVE;
+    return CPU_OK;
 }
 
-static void op_sta(CPU *cpu, uint8_t mode, uint8_t operand) {
+static inline int op_sta(CPU *cpu, uint8_t mode, uint8_t operand) {
     switch (mode) {
         case MODE_ABSOLUTE:
             cpu->memory[operand] = cpu->A;
@@ -164,12 +168,12 @@ static void op_sta(CPU *cpu, uint8_t mode, uint8_t operand) {
             break;
         default:
             cpu->flags |= FLAG_ERROR;
-            return;
+            return CPU_ERROR;
     }
-    // STA ne modifie pas les flags
+    return CPU_OK;
 }
 
-static void op_stx(CPU *cpu, uint8_t mode, uint8_t operand) {
+static int op_stx(CPU *cpu, uint8_t mode, uint8_t operand) {
     switch (mode) {
         case MODE_ABSOLUTE:
             cpu->memory[operand] = cpu->X;
@@ -179,12 +183,12 @@ static void op_stx(CPU *cpu, uint8_t mode, uint8_t operand) {
             break;
         default:
             cpu->flags |= FLAG_ERROR;
-            return;
+            return CPU_ERROR;
     }
-    // STX ne modifie pas les flags
+    return CPU_OK;
 }
 
-static void op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
+static int op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value = 0;
     switch (mode) {
         case MODE_IMMEDIAT:
@@ -204,7 +208,7 @@ static void op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
             break;
         default:
             cpu->flags |= FLAG_ERROR;
-            return;
+            return CPU_ERROR;
     }
 
     uint8_t original_A = cpu->A;  // Save original A value for overflow check
@@ -224,9 +228,11 @@ static void op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
     // Overflow: signes identiques donnent résultat de signe différent
     if (((original_A ^ value) & 0x80) == 0 && ((original_A ^ cpu->A) & 0x80) != 0)
         cpu->flags |= FLAG_OVERFLOW;
+    
+    return CPU_OK;
 }
 
-static void op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
+static int op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value = 0;
     switch (mode) {
         case MODE_IMMEDIAT:
@@ -246,7 +252,7 @@ static void op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
             break;
         default:
             cpu->flags |= FLAG_ERROR;
-            return;
+            return CPU_ERROR;
     }
 
     uint8_t original_A = cpu->A;  // Save original A value for overflow check
@@ -266,10 +272,12 @@ static void op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
     // Overflow pour soustraction: operands have different signs and result has different sign from minuend
     if (((original_A ^ value) & 0x80) != 0 && ((original_A ^ cpu->A) & 0x80) != 0)
         cpu->flags |= FLAG_OVERFLOW;
+    
+    return CPU_OK;
 }
 
-static void op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
-    uint8_t value = 0;
+static int op_and(CPU *cpu, uint8_t mode, uint8_t operand) {
+    uint8_t value;
     switch (mode) {
         case MODE_IMMEDIAT:
             value = operand;
@@ -288,7 +296,41 @@ static void op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
             break;
         default:
             cpu->flags |= FLAG_ERROR;
-            return;
+            return CPU_ERROR;
+    }
+
+    cpu->A &= value;
+
+    // Update flags Zero et Sign
+    cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);
+    if (cpu->A == 0)
+        cpu->flags |= FLAG_ZERO;
+    if (cpu->A & 0x80)
+        cpu->flags |= FLAG_NEGATIVE;
+    return CPU_OK;
+}
+
+static int op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
+    uint8_t value;
+    switch (mode) {
+        case MODE_IMMEDIAT:
+            value = operand;
+            break;
+        case MODE_ABSOLUTE:
+            value = cpu->memory[operand];
+            break;
+        case MODE_INDEXED_X:
+            value = cpu->memory[(operand + cpu->X) & 0xFF];
+            break;
+        case MODE_INDIRECT:
+            value = cpu->memory[cpu->memory[operand]];
+            break;
+        case MODE_INDIRECT_INDEXED_X:
+            value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
+            break;
+        default:
+            cpu->flags |= FLAG_ERROR;
+            return CPU_ERROR;
     }
 
     cpu->A ^= value;
@@ -298,9 +340,11 @@ static void op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_ZERO;
     if (cpu->A & 0x80)
         cpu->flags |= FLAG_NEGATIVE;
+    
+    return CPU_OK;
 }
 
-static void op_and(CPU *cpu, uint8_t mode, uint8_t operand) {
+static int op_or(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value = 0;
     switch (mode) {
         case MODE_IMMEDIAT:
@@ -320,39 +364,7 @@ static void op_and(CPU *cpu, uint8_t mode, uint8_t operand) {
             break;
         default:
             cpu->flags |= FLAG_ERROR;
-            return;
-    }
-
-    cpu->A &= value;
-
-    cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);
-    if (cpu->A == 0)
-        cpu->flags |= FLAG_ZERO;
-    if (cpu->A & 0x80)
-        cpu->flags |= FLAG_NEGATIVE;
-}
-
-static void op_or(CPU *cpu, uint8_t mode, uint8_t operand) {
-    uint8_t value = 0;
-    switch (mode) {
-        case MODE_IMMEDIAT:
-            value = operand;
-            break;
-        case MODE_ABSOLUTE:
-            value = cpu->memory[operand];
-            break;
-        case MODE_INDEXED_X:
-            value = cpu->memory[(operand + cpu->X) & 0xFF];
-            break;
-        case MODE_INDIRECT:
-            value = cpu->memory[cpu->memory[operand]];
-            break;
-        case MODE_INDIRECT_INDEXED_X:
-            value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
-            break;
-        default:
-            cpu->flags |= FLAG_ERROR;
-            return;
+            return CPU_ERROR;
     }
 
     cpu->A |= value;
@@ -362,9 +374,11 @@ static void op_or(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_ZERO;
     if (cpu->A & 0x80)
         cpu->flags |= FLAG_NEGATIVE;
+    
+    return CPU_OK;
 }
 
-static inline void op_branch(CPU *cpu, uint8_t condition, uint8_t address) {
+static int op_branch(CPU *cpu, uint8_t condition, uint8_t address) {
     int should_branch = 0;
 
     switch(condition) {
@@ -394,9 +408,11 @@ static inline void op_branch(CPU *cpu, uint8_t condition, uint8_t address) {
     if (should_branch) {
         cpu->PC = address;
     }
+    
+    return CPU_OK;
 }
 
-static void op_cmp(CPU *cpu, uint8_t mode, uint8_t operand) {
+static int op_cmp(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value = 0;
     switch (mode) {
         case MODE_IMMEDIAT:
@@ -416,7 +432,7 @@ static void op_cmp(CPU *cpu, uint8_t mode, uint8_t operand) {
             break;
         default:
             cpu->flags |= FLAG_ERROR;
-            return;
+            return CPU_ERROR;
     }
 
     // Perform comparison (A - value) without storing result
@@ -437,9 +453,11 @@ static void op_cmp(CPU *cpu, uint8_t mode, uint8_t operand) {
     // Overflow for comparison: operands have different signs and result has different sign from minuend
     if (((original_A ^ value) & 0x80) != 0 && ((original_A ^ result_byte) & 0x80) != 0)
         cpu->flags |= FLAG_OVERFLOW;
+    
+    return CPU_OK;
 }
 
-static void op_cpx(CPU *cpu, uint8_t mode, uint8_t operand) {
+static int op_cpx(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value = 0;
     switch (mode) {
         case MODE_IMMEDIAT:
@@ -453,7 +471,7 @@ static void op_cpx(CPU *cpu, uint8_t mode, uint8_t operand) {
             break;
         default:
             cpu->flags |= FLAG_ERROR;
-            return;
+            return CPU_ERROR;
     }
 
     // Perform comparison (X - value) without storing result
@@ -474,42 +492,46 @@ static void op_cpx(CPU *cpu, uint8_t mode, uint8_t operand) {
     // Overflow for comparison: operands have different signs and result has different sign from minuend
     if (((original_X ^ value) & 0x80) != 0 && ((original_X ^ result_byte) & 0x80) != 0)
         cpu->flags |= FLAG_OVERFLOW;
+    
+    return CPU_OK;
 }
 
-static void op_push(CPU *cpu, uint8_t mode, uint8_t operand) {
+static int op_push(CPU *cpu, uint8_t mode, uint8_t operand) {
     (void)mode; (void)operand;  // PUSH pousse toujours A
 
     if (cpu->SP < (STACK_BASE - STACK_SIZE + 1)) {  // Stack overflow check
         cpu->flags |= FLAG_ERROR;
-        return;
+        return CPU_ERROR;
     }
 
     cpu->memory[cpu->SP] = cpu->A;
     cpu->SP--;
+    return CPU_OK;
 }
 
-static inline void op_pop(CPU *cpu, uint8_t mode, uint8_t operand) {
-    (void)mode; (void)operand;  // POP dépile toujours vers A
+static int op_pop(CPU *cpu, uint8_t mode, uint8_t operand) {
+    (void)mode; (void)operand;  // POP récupère toujours dans A
 
     if (cpu->SP >= STACK_BASE) {  // Stack underflow check
         cpu->flags |= FLAG_ERROR;
-        return;
+        return CPU_ERROR;
     }
 
     cpu->SP++;
     cpu->A = cpu->memory[cpu->SP];
 
-    // Update flags
+    // Update flags Zero et Sign
     cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);
     if (cpu->A == 0)
         cpu->flags |= FLAG_ZERO;
     if (cpu->A & 0x80)
         cpu->flags |= FLAG_NEGATIVE;
+    return CPU_OK;
 }
 
-static inline void op_halt(CPU *cpu, uint8_t mode, uint8_t operand) {
+static inline int op_halt(CPU *cpu, uint8_t mode, uint8_t operand) {
     (void)cpu; (void)mode; (void)operand;
-    // Le flag HALT sera géré dans cpu_step
+    return CPU_HALT;
 }
 
 // Table de dispatch
@@ -583,81 +605,52 @@ invalid_lbl:
         return CPU_ERROR;
 op_nop_lbl:
     op_nop(cpu, mode, operand);
-    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
     return CPU_OK;
 
 op_lda_lbl:
-    op_lda(cpu, mode, operand);
-    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
-    return CPU_OK;
+    return op_lda(cpu, mode, operand);
 
 op_ldx_lbl:
-    op_ldx(cpu, mode, operand);
-    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
-    return CPU_OK;
+    return op_ldx(cpu, mode, operand);
 
 op_sta_lbl:
-    op_sta(cpu, mode, operand);
-    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
-    return CPU_OK;
+    return op_sta(cpu, mode, operand);
 
 op_stx_lbl:
-    op_stx(cpu, mode, operand);
-    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
-    return CPU_OK;
+    return op_stx(cpu, mode, operand);
 
 op_add_lbl:
-    op_add(cpu, mode, operand);
-    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
-    return CPU_OK;
+    return op_add(cpu, mode, operand);
 
 op_sub_lbl:
-    op_sub(cpu, mode, operand);
-    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
-    return CPU_OK;
+    return op_sub(cpu, mode, operand);
 
 op_xor_lbl:
-    op_xor(cpu, mode, operand);
-    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
-    return CPU_OK;
+    return op_xor(cpu, mode, operand);
 
 op_and_lbl:
-    op_and(cpu, mode, operand);
-    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
-    return CPU_OK;
+    return op_and(cpu, mode, operand);
 
 op_or_lbl:
-    op_or(cpu, mode, operand);
-    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
-    return CPU_OK;
+    return op_or(cpu, mode, operand);
 
 op_branch_lbl:
-    op_branch(cpu, mode, operand);
-    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
-    return CPU_OK;
+    return op_branch(cpu, mode, operand);
 
 op_pop_lbl:
-    op_pop(cpu, mode, operand);
-    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
-    return CPU_OK;
+    return op_pop(cpu, mode, operand);
 
 op_push_lbl:
-    op_push(cpu, mode, operand);
-    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
-    return CPU_OK;
+    return op_push(cpu, mode, operand);
 
 op_cmp_lbl:
-    op_cmp(cpu, mode, operand);
-    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
-    return CPU_OK;
+    return op_cmp(cpu, mode, operand);
 
 op_cpx_lbl:
-    op_cpx(cpu, mode, operand);
-    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
-    return CPU_OK;
+    return op_cpx(cpu, mode, operand);
 
 op_halt_lbl:
-    // HALT instruction
+    op_halt(cpu, mode, operand);
     return CPU_HALT;
 
 }
