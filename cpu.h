@@ -123,19 +123,6 @@ static inline void op_lda(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_NEGATIVE;
 }
 
-<<<<<<< HEAD
-static inline void op_ldx(CPU *cpu, uint8_t mode, uint8_t operand) {
-    if (mode == MODE_IMM) {
-        cpu->X = operand;
-    } else if (mode == MODE_ABS) {
-        cpu->X = cpu->memory[operand];
-    } else if (mode == MODE_IDX) {
-        cpu->X = cpu->memory[(operand + cpu->X) & 0xFF];
-    } else if (mode == MODE_IND) {
-        cpu->X = cpu->memory[cpu->memory[operand]];
-    } else if (mode == MODE_IND_INDX) {
-        cpu->X = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
-=======
 static void op_ldx(CPU *cpu, uint8_t mode, uint8_t operand) {
     switch (mode) {
         case MODE_IMMEDIAT:
@@ -156,7 +143,6 @@ static void op_ldx(CPU *cpu, uint8_t mode, uint8_t operand) {
         default:
             cpu->flags |= FLAG_ERROR;
             return;
->>>>>>> main
     }
 
     cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);
@@ -166,17 +152,6 @@ static void op_ldx(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_NEGATIVE;
 }
 
-<<<<<<< HEAD
-static inline void op_sta(CPU *cpu, uint8_t mode, uint8_t operand) {
-    if (mode == MODE_ABS) {
-        cpu->memory[operand] = cpu->A;
-    } else if (mode == MODE_IDX) {
-        cpu->memory[(operand + cpu->X) & 0xFF] = cpu->A;
-    } else if (mode == MODE_IND) {
-        cpu->memory[cpu->memory[operand]] = cpu->A;
-    } else if (mode == MODE_IND_INDX) {
-        cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]] = cpu->A;
-=======
 static void op_sta(CPU *cpu, uint8_t mode, uint8_t operand) {
     switch (mode) {
         case MODE_ABSOLUTE:
@@ -194,22 +169,10 @@ static void op_sta(CPU *cpu, uint8_t mode, uint8_t operand) {
         default:
             cpu->flags |= FLAG_ERROR;
             return;
->>>>>>> main
     }
     // STA ne modifie pas les flags
 }
 
-<<<<<<< HEAD
-static inline void op_stx(CPU *cpu, uint8_t mode, uint8_t operand) {
-    if (mode == MODE_ABS) {
-        cpu->memory[operand] = cpu->X;
-    } else if (mode == MODE_IDX) {
-        cpu->memory[(operand + cpu->X) & 0xFF] = cpu->X;
-    } else if (mode == MODE_IND) {
-        cpu->memory[cpu->memory[operand]] = cpu->X;
-    } else if (mode == MODE_IND_INDX) {
-        cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]] = cpu->X;
-=======
 static void op_stx(CPU *cpu, uint8_t mode, uint8_t operand) {
     switch (mode) {
         case MODE_ABSOLUTE:
@@ -227,25 +190,10 @@ static void op_stx(CPU *cpu, uint8_t mode, uint8_t operand) {
         default:
             cpu->flags |= FLAG_ERROR;
             return;
->>>>>>> main
     }
     // STX ne modifie pas les flags
 }
 
-<<<<<<< HEAD
-static inline void op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
-    uint8_t value;
-    if (mode == MODE_IMM) {
-        value = operand;
-    } else if (mode == MODE_ABS) {
-        value = cpu->memory[operand];
-    } else if (mode == MODE_IDX) {
-        value = cpu->memory[(operand + cpu->X) & 0xFF];
-    } else if (mode == MODE_IND) {
-        value = cpu->memory[cpu->memory[operand]];
-    } else if (mode == MODE_IND_INDX) {
-        value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
-=======
 static void op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value = 0;
     switch (mode) {
@@ -267,7 +215,6 @@ static void op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
         default:
             cpu->flags |= FLAG_ERROR;
             return;
->>>>>>> main
     }
 
     uint16_t result = cpu->A + value;
@@ -288,20 +235,6 @@ static void op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_OVERFLOW;
 }
 
-<<<<<<< HEAD
-static inline void op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
-    uint8_t value;
-    if (mode == MODE_IMM) {
-        value = operand;
-    } else if (mode == MODE_ABS) {
-        value = cpu->memory[operand];
-    } else if (mode == MODE_IDX) {
-        value = cpu->memory[(operand + cpu->X) & 0xFF];
-    } else if (mode == MODE_IND) {
-        value = cpu->memory[cpu->memory[operand]];
-    } else if (mode == MODE_IND_INDX) {
-        value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
-=======
 static void op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value = 0;
     switch (mode) {
@@ -323,7 +256,6 @@ static void op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
         default:
             cpu->flags |= FLAG_ERROR;
             return;
->>>>>>> main
     }
 
     uint16_t result = cpu->A - value;
@@ -344,20 +276,6 @@ static void op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_OVERFLOW;
 }
 
-<<<<<<< HEAD
-static inline void op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
-    uint8_t value;
-    if (mode == MODE_IMM) {
-        value = operand;
-    } else if (mode == MODE_ABS) {
-        value = cpu->memory[operand];
-    } else if (mode == MODE_IDX) {
-        value = cpu->memory[(operand + cpu->X) & 0xFF];
-    } else if (mode == MODE_IND) {
-        value = cpu->memory[cpu->memory[operand]];
-    } else if (mode == MODE_IND_INDX) {
-        value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
-=======
 static void op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value = 0;
     switch (mode) {
@@ -379,7 +297,6 @@ static void op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
         default:
             cpu->flags |= FLAG_ERROR;
             return;
->>>>>>> main
     }
 
     cpu->A ^= value;
@@ -391,20 +308,6 @@ static void op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_NEGATIVE;
 }
 
-<<<<<<< HEAD
-static inline void op_and(CPU *cpu, uint8_t mode, uint8_t operand) {
-    uint8_t value;
-    if (mode == MODE_IMM) {
-        value = operand;
-    } else if (mode == MODE_ABS) {
-        value = cpu->memory[operand];
-    } else if (mode == MODE_IDX) {
-        value = cpu->memory[(operand + cpu->X) & 0xFF];
-    } else if (mode == MODE_IND) {
-        value = cpu->memory[cpu->memory[operand]];
-    } else if (mode == MODE_IND_INDX) {
-        value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
-=======
 static void op_and(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value = 0;
     switch (mode) {
@@ -426,7 +329,6 @@ static void op_and(CPU *cpu, uint8_t mode, uint8_t operand) {
         default:
             cpu->flags |= FLAG_ERROR;
             return;
->>>>>>> main
     }
 
     cpu->A &= value;
@@ -438,20 +340,6 @@ static void op_and(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_NEGATIVE;
 }
 
-<<<<<<< HEAD
-static inline void op_or(CPU *cpu, uint8_t mode, uint8_t operand) {
-    uint8_t value;
-    if (mode == MODE_IMM) {
-        value = operand;
-    } else if (mode == MODE_ABS) {
-        value = cpu->memory[operand];
-    } else if (mode == MODE_IDX) {
-        value = cpu->memory[(operand + cpu->X) & 0xFF];
-    } else if (mode == MODE_IND) {
-        value = cpu->memory[cpu->memory[operand]];
-    } else if (mode == MODE_IND_INDX) {
-        value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
-=======
 static void op_or(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value = 0;
     switch (mode) {
@@ -473,7 +361,6 @@ static void op_or(CPU *cpu, uint8_t mode, uint8_t operand) {
         default:
             cpu->flags |= FLAG_ERROR;
             return;
->>>>>>> main
     }
 
     cpu->A |= value;
@@ -671,22 +558,6 @@ op_halt_lbl:
     // HALT instruction
     return CPU_HALT;
 
-<<<<<<< HEAD
-
-=======
-    // Execute
-    if (opcode < 16 && handlers[opcode]) {
-        handlers[opcode](cpu, mode, operand);
-        if (cpu->flags & FLAG_ERROR) {
-            return -1;  // Error detected by handler
-        }
-        return 0;  // Success
-    }
-
-    // Invalid opcode or missing handler: set error flag
-    cpu->flags |= FLAG_ERROR;
-    return -1;
->>>>>>> main
 }
 
 static inline void cpu_run(CPU *cpu) {
