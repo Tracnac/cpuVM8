@@ -16,7 +16,7 @@
 enum { CPU_ERROR = -1, CPU_OK = 0, CPU_HALT = 1 };
 
 // Memory layout
-enum { CODE_BASE = 0x0, DATA_BASE = 0x80, STACK_BASE = 0xFF, MAX_MEMORY_SIZE = 256 };
+enum { CODE_BASE = 0x0, STACK_BASE = 0xFF, STACK_SIZE=2, MAX_MEMORY_SIZE = 256 };
 
 // Registers
 enum {
@@ -57,6 +57,7 @@ enum {
     MODE_IMM = 0x00,  // Immediate:  #value
     MODE_ABS = 0x01,  // Absolute:   address
     MODE_IDX = 0x02,  // Indexed:    address,X
+    MODE_IND = 0x03,  // Indirect:   [$address]
 };
 
 // Branch conditions (byte après OPCODE_B)
@@ -98,6 +99,8 @@ static inline void op_lda(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->A = cpu->memory[operand];
     } else if (mode == MODE_IDX) {
         cpu->A = cpu->memory[(operand + cpu->X) & 0xFF];
+    } else if (mode == MODE_IND) {
+        cpu->A = cpu->memory[cpu->memory[operand]];
     }
 
     // Update flags Zero et Sign
@@ -115,6 +118,8 @@ static inline void op_ldx(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->X = cpu->memory[operand];
     } else if (mode == MODE_IDX) {
         cpu->X = cpu->memory[(operand + cpu->X) & 0xFF];
+    } else if (mode == MODE_IND) {
+        cpu->X = cpu->memory[cpu->memory[operand]];
     }
 
     cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);
@@ -129,6 +134,8 @@ static inline void op_sta(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->memory[operand] = cpu->A;
     } else if (mode == MODE_IDX) {
         cpu->memory[(operand + cpu->X) & 0xFF] = cpu->A;
+    } else if (mode == MODE_IND) {
+        cpu->memory[cpu->memory[operand]] = cpu->A;
     }
     // STA ne modifie pas les flags
 }
@@ -138,6 +145,8 @@ static inline void op_stx(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->memory[operand] = cpu->X;
     } else if (mode == MODE_IDX) {
         cpu->memory[(operand + cpu->X) & 0xFF] = cpu->X;
+    } else if (mode == MODE_IND) {
+        cpu->memory[cpu->memory[operand]] = cpu->X;
     }
     // STX ne modifie pas les flags
 }
@@ -148,8 +157,10 @@ static inline void op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
         value = operand;
     } else if (mode == MODE_ABS) {
         value = cpu->memory[operand];
-    } else {
+    } else if (mode == MODE_IDX) {
         value = cpu->memory[(operand + cpu->X) & 0xFF];
+    } else if (mode == MODE_IND) {
+        value = cpu->memory[cpu->memory[operand]];
     }
 
     uint16_t result = cpu->A + value;
@@ -176,8 +187,10 @@ static inline void op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
         value = operand;
     } else if (mode == MODE_ABS) {
         value = cpu->memory[operand];
-    } else {
+    } else if (mode == MODE_IDX) {
         value = cpu->memory[(operand + cpu->X) & 0xFF];
+    } else if (mode == MODE_IND) {
+        value = cpu->memory[cpu->memory[operand]];
     }
 
     uint16_t result = cpu->A - value;
@@ -204,8 +217,10 @@ static inline void op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
         value = operand;
     } else if (mode == MODE_ABS) {
         value = cpu->memory[operand];
-    } else {
+    } else if (mode == MODE_IDX) {
         value = cpu->memory[(operand + cpu->X) & 0xFF];
+    } else if (mode == MODE_IND) {
+        value = cpu->memory[cpu->memory[operand]];
     }
 
     cpu->A ^= value;
@@ -223,8 +238,10 @@ static inline void op_and(CPU *cpu, uint8_t mode, uint8_t operand) {
         value = operand;
     } else if (mode == MODE_ABS) {
         value = cpu->memory[operand];
-    } else {
+    } else if (mode == MODE_IDX) {
         value = cpu->memory[(operand + cpu->X) & 0xFF];
+    } else if (mode == MODE_IND) {
+        value = cpu->memory[cpu->memory[operand]];
     }
 
     cpu->A &= value;
@@ -242,8 +259,10 @@ static inline void op_or(CPU *cpu, uint8_t mode, uint8_t operand) {
         value = operand;
     } else if (mode == MODE_ABS) {
         value = cpu->memory[operand];
-    } else {
+    } else if (mode == MODE_IDX) {
         value = cpu->memory[(operand + cpu->X) & 0xFF];
+    } else if (mode == MODE_IND) {
+        value = cpu->memory[cpu->memory[operand]];
     }
 
     cpu->A |= value;
@@ -274,10 +293,10 @@ static inline void op_branch(CPU *cpu, uint8_t condition, uint8_t address) {
         case COND_CC:  // Carry Clear (C=0)
             should_branch = (cpu->flags & FLAG_CARRY) == 0;
             break;
-        case COND_MI:  // Minus/Negative (S=1)
+        case COND_MI:  // Minus/Negative (N=1)
             should_branch = (cpu->flags & FLAG_NEGATIVE) != 0;
             break;
-        case COND_PL:  // Plus/Positive (S=0)
+        case COND_PL:  // Plus/Positive (N=0)
             should_branch = (cpu->flags & FLAG_NEGATIVE) == 0;
             break;
     }
@@ -290,7 +309,7 @@ static inline void op_branch(CPU *cpu, uint8_t condition, uint8_t address) {
 static inline void op_push(CPU *cpu, uint8_t mode, uint8_t operand) {
     (void)mode; (void)operand;  // PUSH pousse toujours A
 
-    if (cpu->SP < 0xF0) {  // Stack overflow check
+    if (cpu->SP < (STACK_BASE - STACK_SIZE)) {  // Stack overflow check
         return;
     }
 
@@ -301,7 +320,7 @@ static inline void op_push(CPU *cpu, uint8_t mode, uint8_t operand) {
 static inline void op_pop(CPU *cpu, uint8_t mode, uint8_t operand) {
     (void)mode; (void)operand;  // POP dépile toujours vers A
 
-    if (cpu->SP >= 0xFF) {  // Stack underflow check
+    if (cpu->SP >= STACK_BASE) {  // Stack underflow check
         return;
     }
 
@@ -342,7 +361,7 @@ static const opcode_handler handlers[16] = {
 // CPU initialization
 static void initCPU(CPU *cpu) {
     __builtin_memset(cpu, 0, sizeof(CPU));
-    cpu->SP = 0xFF;
+    cpu->SP = STACK_BASE;
 }
 
 // cpu_step
