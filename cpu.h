@@ -49,6 +49,8 @@ enum {
     OPCODE_B       = 0x0A, // B NE, B EQ, B AL ...
     OPCODE_POP     = 0x0B, // Pop from Stack
     OPCODE_PUSH    = 0x0C, // Push to Stack
+    OPCODE_CMP     = 0x0D, // Compare (sets flags without storing result)
+    OPCODE_CPX     = 0x0E, // Compare X register (sets flags without storing result)
     OPCODE_HALT    = 0x0F  // Halt
 };
 
@@ -404,6 +406,86 @@ static inline void op_branch(CPU *cpu, uint8_t condition, uint8_t address) {
     }
 }
 
+static void op_cmp(CPU *cpu, uint8_t mode, uint8_t operand) {
+    uint8_t value = 0;
+    switch (mode) {
+        case MODE_IMMEDIAT:
+            value = operand;
+            break;
+        case MODE_ABSOLUTE:
+            value = cpu->memory[operand];
+            break;
+        case MODE_INDEXED_X:
+            value = cpu->memory[(operand + cpu->X) & 0xFF];
+            break;
+        case MODE_INDIRECT:
+            value = cpu->memory[cpu->memory[operand]];
+            break;
+        case MODE_INDIRECT_INDEXED_X:
+            value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
+            break;
+        default:
+            cpu->flags |= FLAG_ERROR;
+            return;
+    }
+
+    // Perform comparison (A - value) without storing result
+    uint8_t original_A = cpu->A;
+    uint16_t result = cpu->A - value;
+    uint8_t result_byte = result & 0xFF;
+
+    // Update flags
+    cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE | FLAG_CARRY | FLAG_OVERFLOW);
+
+    if (result_byte == 0)
+        cpu->flags |= FLAG_ZERO;
+    if (result_byte & 0x80)
+        cpu->flags |= FLAG_NEGATIVE;
+    if (result < 0x100)  // No borrow
+        cpu->flags |= FLAG_CARRY;
+
+    // Overflow for comparison: operands have different signs and result has different sign from minuend
+    if (((original_A ^ value) & 0x80) != 0 && ((original_A ^ result_byte) & 0x80) != 0)
+        cpu->flags |= FLAG_OVERFLOW;
+}
+
+static void op_cpx(CPU *cpu, uint8_t mode, uint8_t operand) {
+    uint8_t value = 0;
+    switch (mode) {
+        case MODE_IMMEDIAT:
+            value = operand;
+            break;
+        case MODE_ABSOLUTE:
+            value = cpu->memory[operand];
+            break;
+        case MODE_INDIRECT:
+            value = cpu->memory[cpu->memory[operand]];
+            break;
+        default:
+            cpu->flags |= FLAG_ERROR;
+            return;
+    }
+
+    // Perform comparison (X - value) without storing result
+    uint8_t original_X = cpu->X;
+    uint16_t result = cpu->X - value;
+    uint8_t result_byte = result & 0xFF;
+
+    // Update flags
+    cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE | FLAG_CARRY | FLAG_OVERFLOW);
+
+    if (result_byte == 0)
+        cpu->flags |= FLAG_ZERO;
+    if (result_byte & 0x80)
+        cpu->flags |= FLAG_NEGATIVE;
+    if (result < 0x100)  // No borrow
+        cpu->flags |= FLAG_CARRY;
+
+    // Overflow for comparison: operands have different signs and result has different sign from minuend
+    if (((original_X ^ value) & 0x80) != 0 && ((original_X ^ result_byte) & 0x80) != 0)
+        cpu->flags |= FLAG_OVERFLOW;
+}
+
 static inline void op_push(CPU *cpu, uint8_t mode, uint8_t operand) {
     (void)mode; (void)operand;  // PUSH pousse toujours A
 
@@ -485,8 +567,8 @@ static inline __attribute__((always_inline)) int cpu_step(CPU *cpu) {
         &&op_branch_lbl,// 0x0A
         &&op_pop_lbl,   // 0x0B
         &&op_push_lbl,  // 0x0C
-        &&invalid_lbl,  // 0x0D
-        &&invalid_lbl,  // 0x0E
+        &&op_cmp_lbl,   // 0x0D
+        &&op_cpx_lbl,   // 0x0E
         &&op_halt_lbl   // 0x0F
     };
 
@@ -552,6 +634,16 @@ op_pop_lbl:
 
 op_push_lbl:
     op_push(cpu, mode, operand);
+    return CPU_OK;
+
+op_cmp_lbl:
+    op_cmp(cpu, mode, operand);
+    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
+    return CPU_OK;
+
+op_cpx_lbl:
+    op_cpx(cpu, mode, operand);
+    if (cpu->flags & FLAG_ERROR) return CPU_ERROR;
     return CPU_OK;
 
 op_halt_lbl:
