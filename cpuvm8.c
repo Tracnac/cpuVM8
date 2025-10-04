@@ -1,87 +1,108 @@
 #include "cpuvm8.h"
 
-// Fréquence cible en MHz (modifiable dynamiquement)
-double freq_mhz = 16.0;
-
 int main(int argc, char *argv[]) {
-#if FULL_SPEED
-    (void)argc; (void)argv;
-    CPU cpu;
-    initCPU(&cpu);
 
-    // Programme de test (boucle simple)
-    cpu.memory[0] = OPCODE_LDA;
-    cpu.memory[1] = MODE_IMM;
-    cpu.memory[2] = 42;
-    cpu.memory[3] = OPCODE_B;
-    cpu.memory[4] = COND_AL;
-    cpu.memory[5] = 0;  // Jump à 0 (boucle infinie)
+  // Fréquence cible en MHz (modifiable dynamiquement)
+  double freq_mhz = 4.0;
+  int status = 0;
+  int benchmark = 0;
 
-    struct timespec start, now;
-    clock_gettime(CLOCK_MONOTONIC, &start);
+  if (argc > 1) {
+    freq_mhz = atof(argv[1]);
+    if (freq_mhz < 0.01)
+      freq_mhz = 0.01;
+    benchmark = 1;
+  }
 
-    printf("Benchmark: %d instructions...\n", INSTR_COUNT);
-    for (int i = 0; i < INSTR_COUNT; i++) {
-        cpu_step(&cpu);
+  CPU cpu;
+  initCPU(&cpu);
+
+  // Programme de test (boucle simple)
+  cpu.memory[0] = OPCODE_LDA;
+  cpu.memory[1] = MODE_IMMEDIAT;
+  cpu.memory[2] = 42;
+  cpu.memory[3] = OPCODE_B;
+  cpu.memory[4] = COND_AL;
+  cpu.memory[5] = 0; // Jump à 0 (boucle infinie)
+
+  struct timespec start, now;
+  clock_gettime(CLOCK_MONOTONIC, &start);
+
+  for (int i = 0; i < INSTR_COUNT; i++) {
+
+    status = cpu_step(&cpu);
+    if (status == CPU_ERROR) {
+      printf("CPU ERROR at PC=0x%02X\n", cpu.PC - 3);
+      dump_cpu(&cpu);
+      break;
+    } else if (status == CPU_HALT) {
+      printf("CPU HALTED at PC=0x%02X\n", cpu.PC - 1);
+      dump_cpu(&cpu);
+      break;
     }
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    double total_elapsed = (now.tv_sec - start.tv_sec) + (now.tv_nsec - start.tv_nsec) / 1e9;
-    double mips = (double)INSTR_COUNT / (total_elapsed * 1e6);
 
-    printf("--------------------------------------------------\n");
-    printf("Executed %d instructions in %.5f seconds\n", INSTR_COUNT, total_elapsed);
-    printf("Performance: %.2f MIPS (Millions of Instructions Per Second)\n", mips);
-    printf("--------------------------------------------------\n");
-#else
-    if (argc > 1) {
-        freq_mhz = atof(argv[1]);
-        if (freq_mhz < 0.01) freq_mhz = 0.01;
-    }
+    // Calcul du temps cible pour ce cycle
+    if (benchmark) {
+      double target_time = (double)(i + 1) / (freq_mhz * 1e6);
+      clock_gettime(CLOCK_MONOTONIC, &now);
+      double elapsed =
+          (now.tv_sec - start.tv_sec) + (now.tv_nsec - start.tv_nsec) / 1e9;
 
-    CPU cpu;
-    initCPU(&cpu);
-
-    // Programme de test (boucle simple)
-    cpu.memory[0] = OPCODE_LDA;
-    cpu.memory[1] = MODE_IMM;
-    cpu.memory[2] = 42;
-    cpu.memory[3] = OPCODE_B;
-    cpu.memory[4] = COND_AL;
-    cpu.memory[5] = 0;  // Jump à 0 (boucle infinie)
-
-    printf("Benchmark: %d instructions...\n", INSTR_COUNT);
-    printf("Benchmark: %d instructions...\n", INSTR_COUNT);
-    printf("Simulating CPU at %.2f MHz\n", freq_mhz);
-
-    struct timespec start, now;
-    clock_gettime(CLOCK_MONOTONIC, &start);
-
-    for (int i = 0; i < INSTR_COUNT; i++) {
-        cpu_step(&cpu);
-
-        // Calcul du temps cible pour ce cycle
-        double target_time = (double)(i + 1) / (freq_mhz * 1e6);
-        clock_gettime(CLOCK_MONOTONIC, &now);
-        double elapsed = (now.tv_sec - start.tv_sec) + (now.tv_nsec - start.tv_nsec) / 1e9;
-
-        // Si on va trop vite, on attend le temps manquant
-        if (elapsed < target_time) {
-            double sleep_time = target_time - elapsed;
-            if (sleep_time > 0.00001) { // évite usleep trop courts
-                usleep((useconds_t)(sleep_time * 1e6));
-            }
+      // Si on va trop vite, on attend le temps manquant
+      if (elapsed < target_time) {
+        double sleep_time = target_time - elapsed;
+        if (sleep_time > 0.00001) { // évite usleep trop courts
+          usleep((useconds_t)(sleep_time * 1e6));
         }
-        // Si on est en retard, on ne fait rien (on rattrape au cycle suivant)
+      }
     }
+  }
 
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    double total_elapsed = (now.tv_sec - start.tv_sec) + (now.tv_nsec - start.tv_nsec) / 1e9;
-    double mips = (double)INSTR_COUNT / (total_elapsed * 1e6);
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  double total_elapsed =
+      (now.tv_sec - start.tv_sec) + (now.tv_nsec - start.tv_nsec) / 1e9;
+  double mips = (double)INSTR_COUNT / (total_elapsed * 1e6);
 
+  if (status != CPU_ERROR) {
+    if (benchmark) {
+      printf("Benchmark: %d instructions...\n", INSTR_COUNT);
+      printf("Simulating CPU at %.2f MHz\n", freq_mhz);
+    }
     printf("--------------------------------------------------\n");
-    printf("Executed %d instructions in %.5f seconds\n", INSTR_COUNT, total_elapsed);
-    printf("Simulated frequency: %.2f MHz\n", freq_mhz);
-    printf("Performance: %.2f MIPS (Millions of Instructions Per Second)\n", mips);
+    printf("Executed %d instructions in %.5f seconds\n", INSTR_COUNT,
+           total_elapsed);
+    printf("Estimated performance: %.2f MIPS (Millions of Instructions Per Second)\n",
+           mips);
     printf("--------------------------------------------------\n");
-#endif
+  }
+}
+
+void dump_cpu(const CPU *cpu) {
+  printf("=== CPU DUMP ===\n");
+  printf("A:  0x%02X\n", cpu->A);
+  printf("X:  0x%02X\n", cpu->X);
+  printf("PC: 0x%02X\n", cpu->PC);
+  printf("SP: 0x%02X\n", cpu->SP);
+  printf("Flags: 0x%02X", cpu->flags);
+  if (cpu->flags & FLAG_CARRY)
+    printf(" CARRY");
+  if (cpu->flags & FLAG_ZERO)
+    printf(" ZERO");
+  if (cpu->flags & FLAG_NEGATIVE)
+    printf(" NEG");
+  if (cpu->flags & FLAG_OVERFLOW)
+    printf(" OVF");
+  if (cpu->flags & FLAG_ERROR)
+    printf(" ERROR");
+  printf("\n");
+
+  printf("Memory dump (hex):\n");
+  for (int i = 0; i < MAX_MEMORY_SIZE; i += 16) {
+    printf("%02X: ", i);
+    for (int j = 0; j < 16; ++j) {
+      printf("%02X ", cpu->memory[i + j]);
+    }
+    printf("\n");
+  }
+  printf("================\n");
 }

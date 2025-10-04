@@ -7,6 +7,6 @@
 #include <unistd.h>     // usleep...
 
 #define INSTR_COUNT 10000000
-#define FULL_SPEED 1
 
+void dump_cpu(const CPU *cpu);
 #endif
