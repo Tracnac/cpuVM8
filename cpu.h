@@ -133,14 +133,8 @@ static void op_ldx(CPU *cpu, uint8_t mode, uint8_t operand) {
         case MODE_ABSOLUTE:
             cpu->X = cpu->memory[operand];
             break;
-        case MODE_INDEXED_X:
-            cpu->X = cpu->memory[(operand + cpu->X) & 0xFF];
-            break;
         case MODE_INDIRECT:
             cpu->X = cpu->memory[cpu->memory[operand]];
-            break;
-        case MODE_INDIRECT_INDEXED_X:
-            cpu->X = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
             break;
         default:
             cpu->flags |= FLAG_ERROR;
@@ -454,14 +448,8 @@ static void op_cpx(CPU *cpu, uint8_t mode, uint8_t operand) {
         case MODE_ABSOLUTE:
             value = cpu->memory[operand];
             break;
-        case MODE_INDEXED_X:
-            value = cpu->memory[(operand + cpu->X) & 0xFF];
-            break;
         case MODE_INDIRECT:
             value = cpu->memory[cpu->memory[operand]];
-            break;
-        case MODE_INDIRECT_INDEXED_X:
-            value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
             break;
         default:
             cpu->flags |= FLAG_ERROR;

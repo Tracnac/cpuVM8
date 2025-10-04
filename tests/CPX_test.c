@@ -75,21 +75,7 @@ void CPX_test(void) {
     TEST_ASSERT_FALSE(cpu.flags & FLAG_NEGATIVE);
     TEST_ASSERT_FALSE(cpu.flags & FLAG_OVERFLOW);
     
-    // Test 6: CPX indexed addressing
-    initCPU(&cpu);
-    cpu.PC = 0;
-    cpu.X = 0x77;
-    cpu.memory[0] = OPCODE_CPX;
-    cpu.memory[1] = MODE_INDEXED_X;
-    cpu.memory[2] = 0x20;
-    cpu.memory[0x97] = 0x88;  // 0x20 + 0x77 = 0x97
-    TEST_ASSERT_EQUAL_INT(CPU_OK, cpu_step(&cpu));
-    TEST_ASSERT_EQUAL_UINT8(0x77, cpu.X);  // X should be unchanged
-    TEST_ASSERT_FALSE(cpu.flags & FLAG_ZERO);     // 0x77 != 0x88
-    TEST_ASSERT_FALSE(cpu.flags & FLAG_CARRY);    // Borrow occurred
-    TEST_ASSERT_TRUE(cpu.flags & FLAG_NEGATIVE);  // Negative result
-    
-    // Test 7: CPX indirect addressing
+    // Test 6: CPX indirect addressing
     initCPU(&cpu);
     cpu.PC = 0;
     cpu.X = 0x44;
@@ -105,23 +91,7 @@ void CPX_test(void) {
     TEST_ASSERT_FALSE(cpu.flags & FLAG_NEGATIVE);
     TEST_ASSERT_FALSE(cpu.flags & FLAG_OVERFLOW);
     
-    // Test 8: CPX indirect indexed addressing
-    initCPU(&cpu);
-    cpu.PC = 0;
-    cpu.X = 0x55;
-    cpu.memory[0] = OPCODE_CPX;
-    cpu.memory[1] = MODE_INDIRECT_INDEXED_X;
-    cpu.memory[2] = 0x40;
-    cpu.memory[0x95] = 0x60;  // 0x40 + 0x55 = 0x95 (indirect address)
-    cpu.memory[0x60] = 0x55;  // Value to compare
-    TEST_ASSERT_EQUAL_INT(CPU_OK, cpu_step(&cpu));
-    TEST_ASSERT_EQUAL_UINT8(0x55, cpu.X);  // X should be unchanged
-    TEST_ASSERT_TRUE(cpu.flags & FLAG_ZERO);      // Equal values
-    TEST_ASSERT_TRUE(cpu.flags & FLAG_CARRY);
-    TEST_ASSERT_FALSE(cpu.flags & FLAG_NEGATIVE);
-    TEST_ASSERT_FALSE(cpu.flags & FLAG_OVERFLOW);
-    
-    // Test 9: CPX with invalid addressing mode
+    // Test 7: CPX with invalid addressing mode
     initCPU(&cpu);
     cpu.PC = 0;
     cpu.X = 0x11;
@@ -132,7 +102,7 @@ void CPX_test(void) {
     TEST_ASSERT_TRUE(cpu.flags & FLAG_ERROR);
     TEST_ASSERT_EQUAL_UINT8(0x11, cpu.X);  // X should be unchanged
     
-    // Test 10: CPX with zero result (boundary case)
+    // Test 8: CPX with zero result (boundary case)
     initCPU(&cpu);
     cpu.PC = 0;
     cpu.X = 0x00;
@@ -146,7 +116,7 @@ void CPX_test(void) {
     TEST_ASSERT_FALSE(cpu.flags & FLAG_NEGATIVE);
     TEST_ASSERT_FALSE(cpu.flags & FLAG_OVERFLOW);
     
-    // Test 11: CPX creating maximum negative result
+    // Test 9: CPX creating maximum negative result
     initCPU(&cpu);
     cpu.PC = 0;
     cpu.X = 0x00;
@@ -160,7 +130,7 @@ void CPX_test(void) {
     TEST_ASSERT_TRUE(cpu.flags & FLAG_NEGATIVE);  // 0xFF is negative
     TEST_ASSERT_FALSE(cpu.flags & FLAG_OVERFLOW);
     
-    // Test 12: CPX that would cause SUB overflow (signed)
+    // Test 10: CPX that would cause SUB overflow (signed)
     initCPU(&cpu);
     cpu.PC = 0;
     cpu.X = 0x7F;  // +127 (maximum positive signed)
@@ -174,7 +144,7 @@ void CPX_test(void) {
     TEST_ASSERT_TRUE(cpu.flags & FLAG_NEGATIVE);  // Result is 0xFF
     TEST_ASSERT_TRUE(cpu.flags & FLAG_OVERFLOW);  // Signed overflow
     
-    // Test 13: CPX loop counter scenario (X counting down)
+    // Test 11: CPX loop counter scenario (X counting down)
     initCPU(&cpu);
     cpu.PC = 0;
     cpu.X = 0x01;  // Loop counter
@@ -187,7 +157,7 @@ void CPX_test(void) {
     TEST_ASSERT_TRUE(cpu.flags & FLAG_CARRY);     // X > 0
     TEST_ASSERT_FALSE(cpu.flags & FLAG_NEGATIVE);
     
-    // Test 14: CPX array bounds checking scenario
+    // Test 12: CPX array bounds checking scenario
     initCPU(&cpu);
     cpu.PC = 0;
     cpu.X = 0x10;  // Array index
@@ -201,7 +171,7 @@ void CPX_test(void) {
     TEST_ASSERT_TRUE(cpu.flags & FLAG_NEGATIVE);  // Negative result
     // This means X < array_size, so index is valid
     
-    // Test 15: CPX maximum value comparison
+    // Test 13: CPX maximum value comparison
     initCPU(&cpu);
     cpu.PC = 0;
     cpu.X = 0xFF;  // Maximum value
