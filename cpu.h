@@ -7,8 +7,7 @@
 
 // Plus simple tu meurs
 /*
- * 0x00-0x7F : Code (128 bytes)
- * 0x80-0xEF : Data/Heap (112 bytes)
+ * 0x00-0xEF : Code (240 bytes)
  * 0xF0-0xFF : Stack (16 bytes)
  */
 
@@ -54,10 +53,11 @@ enum {
 
 // Addressing modes
 enum {
-    MODE_IMM = 0x00,  // Immediate:  #value
-    MODE_ABS = 0x01,  // Absolute:   address
-    MODE_IDX = 0x02,  // Indexed:    address,X
-    MODE_IND = 0x03,  // Indirect:   [$address]
+    MODE_IMM  = 0x00,  // Immediate:  #value
+    MODE_ABS  = 0x01,  // Absolute:   address
+    MODE_IDX  = 0x02,  // Indexed:    address,X
+    MODE_IND  = 0x03,  // Indirect:   [$address]
+    MODE_IND_INDX = 0x04,  // Indirect Indexed: [$address,X]
 };
 
 // Branch conditions (byte après OPCODE_B)
@@ -101,6 +101,8 @@ static inline void op_lda(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->A = cpu->memory[(operand + cpu->X) & 0xFF];
     } else if (mode == MODE_IND) {
         cpu->A = cpu->memory[cpu->memory[operand]];
+    } else if (mode == MODE_IND_INDX) {
+        cpu->A = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
     }
 
     // Update flags Zero et Sign
@@ -120,6 +122,8 @@ static inline void op_ldx(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->X = cpu->memory[(operand + cpu->X) & 0xFF];
     } else if (mode == MODE_IND) {
         cpu->X = cpu->memory[cpu->memory[operand]];
+    } else if (mode == MODE_IND_INDX) {
+        cpu->X = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
     }
 
     cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);
@@ -136,6 +140,8 @@ static inline void op_sta(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->memory[(operand + cpu->X) & 0xFF] = cpu->A;
     } else if (mode == MODE_IND) {
         cpu->memory[cpu->memory[operand]] = cpu->A;
+    } else if (mode == MODE_IND_INDX) {
+        cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]] = cpu->A;
     }
     // STA ne modifie pas les flags
 }
@@ -147,6 +153,8 @@ static inline void op_stx(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->memory[(operand + cpu->X) & 0xFF] = cpu->X;
     } else if (mode == MODE_IND) {
         cpu->memory[cpu->memory[operand]] = cpu->X;
+    } else if (mode == MODE_IND_INDX) {
+        cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]] = cpu->X;
     }
     // STX ne modifie pas les flags
 }
@@ -161,6 +169,8 @@ static inline void op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
         value = cpu->memory[(operand + cpu->X) & 0xFF];
     } else if (mode == MODE_IND) {
         value = cpu->memory[cpu->memory[operand]];
+    } else if (mode == MODE_IND_INDX) {
+        value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
     }
 
     uint16_t result = cpu->A + value;
@@ -191,6 +201,8 @@ static inline void op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
         value = cpu->memory[(operand + cpu->X) & 0xFF];
     } else if (mode == MODE_IND) {
         value = cpu->memory[cpu->memory[operand]];
+    } else if (mode == MODE_IND_INDX) {
+        value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
     }
 
     uint16_t result = cpu->A - value;
@@ -221,6 +233,8 @@ static inline void op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
         value = cpu->memory[(operand + cpu->X) & 0xFF];
     } else if (mode == MODE_IND) {
         value = cpu->memory[cpu->memory[operand]];
+    } else if (mode == MODE_IND_INDX) {
+        value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
     }
 
     cpu->A ^= value;
@@ -242,6 +256,8 @@ static inline void op_and(CPU *cpu, uint8_t mode, uint8_t operand) {
         value = cpu->memory[(operand + cpu->X) & 0xFF];
     } else if (mode == MODE_IND) {
         value = cpu->memory[cpu->memory[operand]];
+    } else if (mode == MODE_IND_INDX) {
+        value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
     }
 
     cpu->A &= value;
@@ -263,6 +279,8 @@ static inline void op_or(CPU *cpu, uint8_t mode, uint8_t operand) {
         value = cpu->memory[(operand + cpu->X) & 0xFF];
     } else if (mode == MODE_IND) {
         value = cpu->memory[cpu->memory[operand]];
+    } else if (mode == MODE_IND_INDX) {
+        value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
     }
 
     cpu->A |= value;
