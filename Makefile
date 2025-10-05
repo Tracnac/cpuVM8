@@ -27,7 +27,7 @@ APP_SRCS = cpuvm8.c
 LIB_SRCS = cpu.c
 SRCS = $(LIB_SRCS) $(APP_SRCS)
 
-BUILD_DIR = build
+BUILD_DIR = build/$(BUILD)
 OBJ_DIR = $(BUILD_DIR)/obj
 BIN_DIR = $(BUILD_DIR)/bin
 
@@ -56,7 +56,7 @@ TEST_BIN = $(BIN_DIR)/cpuVM8_test
 # Include auto-generated header dependency files (if present)
 -include $(DEPS)
 
-.PHONY: all clean run tests
+.PHONY: all clean run tests help status debug release debug-tests release-tests debug-run release-run
 
 all: $(TARGET)
 
@@ -85,10 +85,63 @@ $(TEST_BIN): $(TEST_RUNNER_OBJ) $(TEST_OBJS) $(SRC_OBJS) $(UNITY_OBJ) | $(BIN_DI
 	$(CC) $(LDFLAGS) -o $@ $^
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf build
 
 run: $(TARGET)
 	$(LEAK_ENV) ./$(TARGET) 8
 
 tests: $(TEST_BIN)
 	./$(TEST_BIN)
+
+help:
+	@echo "Available targets:"
+	@echo "  all          - Build main application (default)"
+	@echo "  tests        - Build and run tests"
+	@echo "  run          - Build and run main application"
+	@echo "  clean        - Remove all build directories"
+	@echo "  status       - Show current build configuration"
+	@echo "  help         - Show this help message"
+	@echo ""
+	@echo "Easy build mode shortcuts:"
+	@echo "  debug        - Build main app in debug mode"
+	@echo "  release      - Build main app in release mode"
+	@echo "  debug-tests  - Build and run tests in debug mode"
+	@echo "  release-tests- Build and run tests in release mode"
+	@echo "  debug-run    - Build and run main app in debug mode"
+	@echo "  release-run  - Build and run main app in release mode"
+	@echo ""
+	@echo "Advanced (manual BUILD flag):"
+	@echo "  make BUILD=debug all"
+	@echo "  make BUILD=release tests"
+
+status:
+	@echo "=== BUILD STATUS ==="
+	@echo ""
+	@echo "DEBUG BUILD:"
+	@if [ -f "build/debug/bin/cpuvm8" ]; then echo "  ✓ Main binary: build/debug/bin/cpuvm8"; else echo "  ✗ Main binary: not built"; fi
+	@if [ -f "build/debug/bin/cpuVM8_test" ]; then echo "  ✓ Test binary: build/debug/bin/cpuVM8_test"; else echo "  ✗ Test binary: not built"; fi
+	@echo ""
+	@echo "RELEASE BUILD:"
+	@if [ -f "build/release/bin/cpuvm8" ]; then echo "  ✓ Main binary: build/release/bin/cpuvm8"; else echo "  ✗ Main binary: not built"; fi
+	@if [ -f "build/release/bin/cpuVM8_test" ]; then echo "  ✓ Test binary: build/release/bin/cpuVM8_test"; else echo "  ✗ Test binary: not built"; fi
+	@echo ""
+	@echo "Default build mode for 'make' commands: $(BUILD)"
+
+# Convenient aliases for debug/release builds
+debug:
+	$(MAKE) BUILD=debug all
+
+release:
+	$(MAKE) BUILD=release all
+
+debug-tests:
+	$(MAKE) BUILD=debug tests
+
+release-tests:
+	$(MAKE) BUILD=release tests
+
+debug-run:
+	$(MAKE) BUILD=debug run
+
+release-run:
+	$(MAKE) BUILD=release run
