@@ -51,16 +51,23 @@ enum {
     OPCODE_PUSH    = 0x0C, // Push to Stack
     OPCODE_CMP     = 0x0D, // Compare (sets flags without storing result)
     OPCODE_CPX     = 0x0E, // Compare X register (sets flags without storing result)
-    OPCODE_HALT    = 0x0F  // Halt
+    OPCODE_HALT    = 0x0F, // Halt
+    OPCODE_ROR     = 0x10, // Rotate Right
+    OPCODE_ROL     = 0x11, // Rotate Left
+    OPCODE_SHR     = 0x12, // Shift Right
+    OPCODE_SHL     = 0x13, // Shift Left
+    OPCODE_INX     = 0x14, // Increment X
+    OPCODE_DEX     = 0x15  // Decrement X
 };
 
 // Addressing modes
 enum {
-    MODE_IMMEDIAT  = 0x00,  // Immediate:  #value
-    MODE_ABSOLUTE  = 0x01,  // Absolute:   address
-    MODE_INDEXED_X  = 0x02,  // Indexed:    address,X
-    MODE_INDIRECT  = 0x03,  // Indirect:   [$address]
-    MODE_INDIRECT_INDEXED_X = 0x04,  // Indirect Indexed: [$address,X]
+    MODE_IMMEDIAT  = 0x00,   // Immediate:  #value
+    MODE_ABSOLUTE  = 0x01,   // Absolute:   address
+    MODE_ABSOLUTE_X  = 0x02, // Indexed:    address,X
+    MODE_INDIRECT  = 0x03,   // Indirect:   [$address]
+    MODE_INDIRECT_X = 0x04,  // Indirect Indexed: [$address,X]
+    MODE_REGISTER = 0x05     // REGISTER A
 };
 
 // Branch conditions (byte après OPCODE_B)
@@ -103,13 +110,13 @@ static inline void op_lda(CPU *cpu, uint8_t mode, uint8_t operand) {
         case MODE_ABSOLUTE:
             cpu->A = cpu->memory[operand];
             break;
-        case MODE_INDEXED_X:
+        case MODE_ABSOLUTE_X:
             cpu->A = cpu->memory[(operand + cpu->X) & 0xFF];
             break;
         case MODE_INDIRECT:
             cpu->A = cpu->memory[cpu->memory[operand]];
             break;
-        case MODE_INDIRECT_INDEXED_X:
+        case MODE_INDIRECT_X:
             cpu->A = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
             break;
         default:
@@ -153,13 +160,13 @@ static void op_sta(CPU *cpu, uint8_t mode, uint8_t operand) {
         case MODE_ABSOLUTE:
             cpu->memory[operand] = cpu->A;
             break;
-        case MODE_INDEXED_X:
+        case MODE_ABSOLUTE_X:
             cpu->memory[(operand + cpu->X) & 0xFF] = cpu->A;
             break;
         case MODE_INDIRECT:
             cpu->memory[cpu->memory[operand]] = cpu->A;
             break;
-        case MODE_INDIRECT_INDEXED_X:
+        case MODE_INDIRECT_X:
             cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]] = cpu->A;
             break;
         default:
@@ -193,13 +200,13 @@ static void op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
         case MODE_ABSOLUTE:
             value = cpu->memory[operand];
             break;
-        case MODE_INDEXED_X:
+        case MODE_ABSOLUTE_X:
             value = cpu->memory[(operand + cpu->X) & 0xFF];
             break;
         case MODE_INDIRECT:
             value = cpu->memory[cpu->memory[operand]];
             break;
-        case MODE_INDIRECT_INDEXED_X:
+        case MODE_INDIRECT_X:
             value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
             break;
         default:
@@ -235,13 +242,13 @@ static void op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
         case MODE_ABSOLUTE:
             value = cpu->memory[operand];
             break;
-        case MODE_INDEXED_X:
+        case MODE_ABSOLUTE_X:
             value = cpu->memory[(operand + cpu->X) & 0xFF];
             break;
         case MODE_INDIRECT:
             value = cpu->memory[cpu->memory[operand]];
             break;
-        case MODE_INDIRECT_INDEXED_X:
+        case MODE_INDIRECT_X:
             value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
             break;
         default:
@@ -277,13 +284,13 @@ static void op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
         case MODE_ABSOLUTE:
             value = cpu->memory[operand];
             break;
-        case MODE_INDEXED_X:
+        case MODE_ABSOLUTE_X:
             value = cpu->memory[(operand + cpu->X) & 0xFF];
             break;
         case MODE_INDIRECT:
             value = cpu->memory[cpu->memory[operand]];
             break;
-        case MODE_INDIRECT_INDEXED_X:
+        case MODE_INDIRECT_X:
             value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
             break;
         default:
@@ -309,13 +316,13 @@ static void op_and(CPU *cpu, uint8_t mode, uint8_t operand) {
         case MODE_ABSOLUTE:
             value = cpu->memory[operand];
             break;
-        case MODE_INDEXED_X:
+        case MODE_ABSOLUTE_X:
             value = cpu->memory[(operand + cpu->X) & 0xFF];
             break;
         case MODE_INDIRECT:
             value = cpu->memory[cpu->memory[operand]];
             break;
-        case MODE_INDIRECT_INDEXED_X:
+        case MODE_INDIRECT_X:
             value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
             break;
         default:
@@ -341,13 +348,13 @@ static void op_or(CPU *cpu, uint8_t mode, uint8_t operand) {
         case MODE_ABSOLUTE:
             value = cpu->memory[operand];
             break;
-        case MODE_INDEXED_X:
+        case MODE_ABSOLUTE_X:
             value = cpu->memory[(operand + cpu->X) & 0xFF];
             break;
         case MODE_INDIRECT:
             value = cpu->memory[cpu->memory[operand]];
             break;
-        case MODE_INDIRECT_INDEXED_X:
+        case MODE_INDIRECT_X:
             value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
             break;
         default:
@@ -405,13 +412,13 @@ static void op_cmp(CPU *cpu, uint8_t mode, uint8_t operand) {
         case MODE_ABSOLUTE:
             value = cpu->memory[operand];
             break;
-        case MODE_INDEXED_X:
+        case MODE_ABSOLUTE_X:
             value = cpu->memory[(operand + cpu->X) & 0xFF];
             break;
         case MODE_INDIRECT:
             value = cpu->memory[cpu->memory[operand]];
             break;
-        case MODE_INDIRECT_INDEXED_X:
+        case MODE_INDIRECT_X:
             value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
             break;
         default:
@@ -512,8 +519,208 @@ static void op_halt(CPU *cpu, uint8_t mode, uint8_t operand) {
     // Le flag HALT sera géré dans cpu_step
 }
 
+static void op_ror(CPU *cpu, uint8_t mode, uint8_t operand) {
+    uint8_t value = 0;
+    uint8_t *target = NULL;
+
+    switch (mode) {
+        case MODE_REGISTER:
+            target = &cpu->A;
+            value = cpu->A;
+            break;
+        case MODE_ABSOLUTE:
+            target = &cpu->memory[operand];
+            value = cpu->memory[operand];
+            break;
+        case MODE_ABSOLUTE_X:
+            target = &cpu->memory[(operand + cpu->X) & 0xFF];
+            value = cpu->memory[(operand + cpu->X) & 0xFF];
+            break;
+        case MODE_INDIRECT:
+            target = &cpu->memory[cpu->memory[operand]];
+            value = cpu->memory[cpu->memory[operand]];
+            break;
+        case MODE_INDIRECT_X:
+            target = &cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
+            value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
+            break;
+        default:
+            cpu->flags |= FLAG_ERROR;
+            return;
+    }
+
+    uint8_t old_carry = (cpu->flags & FLAG_CARRY) ? 1 : 0;
+    uint8_t new_carry = value & 1;
+
+    uint8_t result = (uint8_t)((value >> 1) | (old_carry << 7));
+    *target = result;
+
+    cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE | FLAG_CARRY);
+    if (result == 0)
+        cpu->flags |= FLAG_ZERO;
+    if (result & 0x80)
+        cpu->flags |= FLAG_NEGATIVE;
+    if (new_carry)
+        cpu->flags |= FLAG_CARRY;
+}
+
+static void op_rol(CPU *cpu, uint8_t mode, uint8_t operand) {
+    uint8_t value = 0;
+    uint8_t *target = NULL;
+
+    switch (mode) {
+        case MODE_REGISTER:
+            target = &cpu->A;
+            value = cpu->A;
+            break;
+        case MODE_ABSOLUTE:
+            target = &cpu->memory[operand];
+            value = cpu->memory[operand];
+            break;
+        case MODE_ABSOLUTE_X:
+            target = &cpu->memory[(operand + cpu->X) & 0xFF];
+            value = cpu->memory[(operand + cpu->X) & 0xFF];
+            break;
+        case MODE_INDIRECT:
+            target = &cpu->memory[cpu->memory[operand]];
+            value = cpu->memory[cpu->memory[operand]];
+            break;
+        case MODE_INDIRECT_X:
+            target = &cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
+            value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
+            break;
+        default:
+            cpu->flags |= FLAG_ERROR;
+            return;
+    }
+
+    uint8_t old_carry = (cpu->flags & FLAG_CARRY) ? 1 : 0;
+    uint8_t new_carry = (value & 0x80) ? 1 : 0;
+
+    uint8_t result = (uint8_t)((value << 1) | old_carry);
+    *target = result;
+
+    cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE | FLAG_CARRY);
+    if (result == 0)
+        cpu->flags |= FLAG_ZERO;
+    if (result & 0x80)
+        cpu->flags |= FLAG_NEGATIVE;
+    if (new_carry)
+        cpu->flags |= FLAG_CARRY;
+}
+
+static void op_shr(CPU *cpu, uint8_t mode, uint8_t operand) {
+    uint8_t value = 0;
+    uint8_t *target = NULL;
+
+    switch (mode) {
+        case MODE_REGISTER:
+            target = &cpu->A;
+            value = cpu->A;
+            break;
+        case MODE_ABSOLUTE:
+            target = &cpu->memory[operand];
+            value = cpu->memory[operand];
+            break;
+        case MODE_ABSOLUTE_X:
+            target = &cpu->memory[(operand + cpu->X) & 0xFF];
+            value = cpu->memory[(operand + cpu->X) & 0xFF];
+            break;
+        case MODE_INDIRECT:
+            target = &cpu->memory[cpu->memory[operand]];
+            value = cpu->memory[cpu->memory[operand]];
+            break;
+        case MODE_INDIRECT_X:
+            target = &cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
+            value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
+            break;
+        default:
+            cpu->flags |= FLAG_ERROR;
+            return;
+    }
+
+    uint8_t new_carry = value & 1;
+    uint8_t result = value >> 1;
+    *target = result;
+
+    cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE | FLAG_CARRY);
+    if (result == 0)
+        cpu->flags |= FLAG_ZERO;
+    if (result & 0x80)
+        cpu->flags |= FLAG_NEGATIVE;
+    if (new_carry)
+        cpu->flags |= FLAG_CARRY;
+}
+
+static void op_shl(CPU *cpu, uint8_t mode, uint8_t operand) {
+    uint8_t value = 0;
+    uint8_t *target = NULL;
+
+    switch (mode) {
+        case MODE_REGISTER:
+            target = &cpu->A;
+            value = cpu->A;
+            break;
+        case MODE_ABSOLUTE:
+            target = &cpu->memory[operand];
+            value = cpu->memory[operand];
+            break;
+        case MODE_ABSOLUTE_X:
+            target = &cpu->memory[(operand + cpu->X) & 0xFF];
+            value = cpu->memory[(operand + cpu->X) & 0xFF];
+            break;
+        case MODE_INDIRECT:
+            target = &cpu->memory[cpu->memory[operand]];
+            value = cpu->memory[cpu->memory[operand]];
+            break;
+        case MODE_INDIRECT_X:
+            target = &cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
+            value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
+            break;
+        default:
+            cpu->flags |= FLAG_ERROR;
+            return;
+    }
+
+    uint8_t new_carry = (value & 0x80) ? 1 : 0;
+    uint8_t result = (uint8_t)(value << 1);
+    *target = result;
+
+    cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE | FLAG_CARRY);
+    if (result == 0)
+        cpu->flags |= FLAG_ZERO;
+    if (result & 0x80)
+        cpu->flags |= FLAG_NEGATIVE;
+    if (new_carry)
+        cpu->flags |= FLAG_CARRY;
+}
+
+static void op_inx(CPU *cpu, uint8_t mode, uint8_t operand) {
+    (void)mode; (void)operand;  // INX operates only on X register
+
+    cpu->X++;
+
+    cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);
+    if (cpu->X == 0)
+        cpu->flags |= FLAG_ZERO;
+    if (cpu->X & 0x80)
+        cpu->flags |= FLAG_NEGATIVE;
+}
+
+static void op_dex(CPU *cpu, uint8_t mode, uint8_t operand) {
+    (void)mode; (void)operand;  // DEX operates only on X register
+
+    cpu->X--;
+
+    cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);
+    if (cpu->X == 0)
+        cpu->flags |= FLAG_ZERO;
+    if (cpu->X & 0x80)
+        cpu->flags |= FLAG_NEGATIVE;
+}
+
 // Table de dispatch
-static const opcode_handler handlers[16] = {
+static const opcode_handler handlers[22] = {
     [OPCODE_NOP]  = op_nop,
     [OPCODE_LDA]  = op_lda,
     [OPCODE_LDX]  = op_ldx,
@@ -530,6 +737,12 @@ static const opcode_handler handlers[16] = {
     [OPCODE_CMP]  = op_cmp,
     [OPCODE_CPX]  = op_cpx,
     [OPCODE_HALT] = op_halt,
+    [OPCODE_ROR]  = op_ror,
+    [OPCODE_ROL]  = op_rol,
+    [OPCODE_SHR]  = op_shr,
+    [OPCODE_SHL]  = op_shl,
+    [OPCODE_INX]  = op_inx,
+    [OPCODE_DEX]  = op_dex,
 };
 
 // CPU initialization
@@ -557,7 +770,7 @@ static inline int cpu_step(CPU *cpu) {
     uint8_t operand = cpu->memory[cpu->PC++];
 
     // Execute
-    if (opcode < 16 && handlers[opcode]) {
+    if (opcode < 22 && handlers[opcode]) {
         handlers[opcode](cpu, mode, operand);
         if (cpu->flags & FLAG_ERROR) {
             return -1;  // Error detected by handler
