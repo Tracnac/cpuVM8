@@ -35,7 +35,7 @@ void XOR_test(void) {
     cpu.PC = 20;
     cpu.X = 0x05;
     cpu.memory[20] = OPCODE_XOR;
-    cpu.memory[21] = MODE_INDEXED_X;
+    cpu.memory[21] = MODE_ABSOLUTE_X;
     cpu.memory[22] = 0x30;
     cpu.memory[(0x30 + cpu.X) & 0xFF] = 0x0F;
     TEST_ASSERT_EQUAL_INT(CPU_OK, cpu_step(&cpu));
@@ -63,7 +63,7 @@ void XOR_test(void) {
     cpu.PC = 40;
     cpu.X = 0x02;
     cpu.memory[40] = OPCODE_XOR;
-    cpu.memory[41] = MODE_INDIRECT_INDEXED_X;
+    cpu.memory[41] = MODE_INDIRECT_X;
     cpu.memory[42] = 0x60;
     cpu.memory[(0x60 + cpu.X) & 0xFF] = 0x70;
     cpu.memory[0x70] = 0x0F;
