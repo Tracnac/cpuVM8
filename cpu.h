@@ -235,7 +235,7 @@ static int op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
     // Overflow: signes identiques donnent résultat de signe différent
     if (((original_A ^ value) & 0x80) == 0 && ((original_A ^ cpu->A) & 0x80) != 0)
         cpu->flags |= FLAG_OVERFLOW;
-    
+
     return CPU_OK;
 }
 
@@ -279,7 +279,7 @@ static int op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
     // Overflow pour soustraction: operands have different signs and result has different sign from minuend
     if (((original_A ^ value) & 0x80) != 0 && ((original_A ^ cpu->A) & 0x80) != 0)
         cpu->flags |= FLAG_OVERFLOW;
-    
+
     return CPU_OK;
 }
 
@@ -326,13 +326,13 @@ static int op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
         case MODE_ABSOLUTE:
             value = cpu->memory[operand];
             break;
-        case MODE_INDEXED_X:
+        case MODE_ABSOLUTE_X:
             value = cpu->memory[(operand + cpu->X) & 0xFF];
             break;
         case MODE_INDIRECT:
             value = cpu->memory[cpu->memory[operand]];
             break;
-        case MODE_INDIRECT_INDEXED_X:
+        case MODE_INDIRECT_X:
             value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
             break;
         default:
@@ -347,7 +347,7 @@ static int op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_ZERO;
     if (cpu->A & 0x80)
         cpu->flags |= FLAG_NEGATIVE;
-    
+
     return CPU_OK;
 }
 
@@ -381,7 +381,7 @@ static int op_or(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_ZERO;
     if (cpu->A & 0x80)
         cpu->flags |= FLAG_NEGATIVE;
-    
+
     return CPU_OK;
 }
 
@@ -415,7 +415,7 @@ static int op_branch(CPU *cpu, uint8_t condition, uint8_t address) {
     if (should_branch) {
         cpu->PC = address;
     }
-    
+
     return CPU_OK;
 }
 
@@ -460,7 +460,7 @@ static int op_cmp(CPU *cpu, uint8_t mode, uint8_t operand) {
     // Overflow for comparison: operands have different signs and result has different sign from minuend
     if (((original_A ^ value) & 0x80) != 0 && ((original_A ^ result_byte) & 0x80) != 0)
         cpu->flags |= FLAG_OVERFLOW;
-    
+
     return CPU_OK;
 }
 
@@ -499,7 +499,7 @@ static int op_cpx(CPU *cpu, uint8_t mode, uint8_t operand) {
     // Overflow for comparison: operands have different signs and result has different sign from minuend
     if (((original_X ^ value) & 0x80) != 0 && ((original_X ^ result_byte) & 0x80) != 0)
         cpu->flags |= FLAG_OVERFLOW;
-    
+
     return CPU_OK;
 }
 
@@ -541,7 +541,7 @@ static inline int op_halt(CPU *cpu, uint8_t mode, uint8_t operand) {
     return CPU_HALT;
 }
 
-static void op_ror(CPU *cpu, uint8_t mode, uint8_t operand) {
+static int op_ror(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value = 0;
     uint8_t *target = NULL;
 
@@ -568,7 +568,7 @@ static void op_ror(CPU *cpu, uint8_t mode, uint8_t operand) {
             break;
         default:
             cpu->flags |= FLAG_ERROR;
-            return;
+            return CPU_ERROR;
     }
 
     uint8_t old_carry = (cpu->flags & FLAG_CARRY) ? 1 : 0;
@@ -584,9 +584,10 @@ static void op_ror(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_NEGATIVE;
     if (new_carry)
         cpu->flags |= FLAG_CARRY;
+    return CPU_OK;
 }
 
-static void op_rol(CPU *cpu, uint8_t mode, uint8_t operand) {
+static int op_rol(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value = 0;
     uint8_t *target = NULL;
 
@@ -613,7 +614,7 @@ static void op_rol(CPU *cpu, uint8_t mode, uint8_t operand) {
             break;
         default:
             cpu->flags |= FLAG_ERROR;
-            return;
+            return CPU_ERROR;
     }
 
     uint8_t old_carry = (cpu->flags & FLAG_CARRY) ? 1 : 0;
@@ -629,9 +630,10 @@ static void op_rol(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_NEGATIVE;
     if (new_carry)
         cpu->flags |= FLAG_CARRY;
+    return CPU_OK;
 }
 
-static void op_shr(CPU *cpu, uint8_t mode, uint8_t operand) {
+static int op_shr(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value = 0;
     uint8_t *target = NULL;
 
@@ -658,7 +660,7 @@ static void op_shr(CPU *cpu, uint8_t mode, uint8_t operand) {
             break;
         default:
             cpu->flags |= FLAG_ERROR;
-            return;
+            return CPU_ERROR;
     }
 
     uint8_t new_carry = value & 1;
@@ -672,9 +674,10 @@ static void op_shr(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_NEGATIVE;
     if (new_carry)
         cpu->flags |= FLAG_CARRY;
+    return CPU_OK;
 }
 
-static void op_shl(CPU *cpu, uint8_t mode, uint8_t operand) {
+static int op_shl(CPU *cpu, uint8_t mode, uint8_t operand) {
     uint8_t value = 0;
     uint8_t *target = NULL;
 
@@ -701,7 +704,7 @@ static void op_shl(CPU *cpu, uint8_t mode, uint8_t operand) {
             break;
         default:
             cpu->flags |= FLAG_ERROR;
-            return;
+            return CPU_ERROR;
     }
 
     uint8_t new_carry = (value & 0x80) ? 1 : 0;
@@ -715,9 +718,10 @@ static void op_shl(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_NEGATIVE;
     if (new_carry)
         cpu->flags |= FLAG_CARRY;
+    return CPU_OK;
 }
 
-static void op_inx(CPU *cpu, uint8_t mode, uint8_t operand) {
+static int op_inx(CPU *cpu, uint8_t mode, uint8_t operand) {
     (void)mode; (void)operand;  // INX operates only on X register
 
     cpu->X++;
@@ -727,9 +731,10 @@ static void op_inx(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_ZERO;
     if (cpu->X & 0x80)
         cpu->flags |= FLAG_NEGATIVE;
+    return CPU_OK;
 }
 
-static void op_dex(CPU *cpu, uint8_t mode, uint8_t operand) {
+static int op_dex(CPU *cpu, uint8_t mode, uint8_t operand) {
     (void)mode; (void)operand;  // DEX operates only on X register
 
     cpu->X--;
@@ -739,6 +744,7 @@ static void op_dex(CPU *cpu, uint8_t mode, uint8_t operand) {
         cpu->flags |= FLAG_ZERO;
     if (cpu->X & 0x80)
         cpu->flags |= FLAG_NEGATIVE;
+    return CPU_OK;
 }
 
 // Table de dispatch
