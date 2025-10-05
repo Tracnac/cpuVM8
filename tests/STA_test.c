@@ -18,7 +18,7 @@ void STA_test(void) {
   cpu.PC = 10;
   cpu.X = 0x05;
   cpu.memory[10] = OPCODE_STA;
-  cpu.memory[11] = MODE_INDEXED_X;
+  cpu.memory[11] = MODE_ABSOLUTE_X;
   cpu.memory[12] = 0x20;
   TEST_ASSERT_EQUAL_INT(CPU_OK, cpu_step(&cpu));
   TEST_ASSERT_EQUAL_UINT8(0xAB, cpu.memory[(0x20 + cpu.X) & 0xFF]);
@@ -37,7 +37,7 @@ void STA_test(void) {
   cpu.PC = 30;
   cpu.X = 0x02;
   cpu.memory[30] = OPCODE_STA;
-  cpu.memory[31] = MODE_INDIRECT_INDEXED_X;
+  cpu.memory[31] = MODE_INDIRECT_X;
   cpu.memory[32] = 0x50;
   cpu.memory[(0x50 + cpu.X) & 0xFF] = 0x60;
   TEST_ASSERT_EQUAL_INT(CPU_OK, cpu_step(&cpu));

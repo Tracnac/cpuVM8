@@ -81,7 +81,7 @@ void CMP_test(void) {
     cpu.A = 0x77;
     cpu.X = 0x05;
     cpu.memory[0] = OPCODE_CMP;
-    cpu.memory[1] = MODE_INDEXED_X;
+    cpu.memory[1] = MODE_ABSOLUTE_X;
     cpu.memory[2] = 0x20;
     cpu.memory[0x25] = 0x88;  // 0x20 + 0x05 = 0x25
     TEST_ASSERT_EQUAL_INT(CPU_OK, cpu_step(&cpu));
@@ -112,7 +112,7 @@ void CMP_test(void) {
     cpu.A = 0x99;
     cpu.X = 0x03;
     cpu.memory[0] = OPCODE_CMP;
-    cpu.memory[1] = MODE_INDIRECT_INDEXED_X;
+    cpu.memory[1] = MODE_INDIRECT_X;
     cpu.memory[2] = 0x50;
     cpu.memory[0x53] = 0x60;  // 0x50 + 0x03 = 0x53 (indirect address)
     cpu.memory[0x60] = 0x99;  // Value to compare

@@ -51,7 +51,7 @@ void edge_cases_test(void) {
     cpu.PC = 0;
     cpu.X = 0x10;
     cpu.memory[0] = OPCODE_LDA;
-    cpu.memory[1] = MODE_INDEXED_X;
+    cpu.memory[1] = MODE_ABSOLUTE_X;
     cpu.memory[2] = 0xF8;  // 0xF8 + 0x10 = 0x108, should wrap to 0x08
     cpu.memory[0x08] = 0x42;
     TEST_ASSERT_EQUAL_INT(CPU_OK, cpu_step(&cpu));
@@ -73,7 +73,7 @@ void edge_cases_test(void) {
     cpu.PC = 0x10;  // Start at higher address to avoid conflicts
     cpu.X = 0x05;
     cpu.memory[0x10] = OPCODE_LDA;
-    cpu.memory[0x11] = MODE_INDIRECT_INDEXED_X;
+    cpu.memory[0x11] = MODE_INDIRECT_X;
     cpu.memory[0x12] = 0xFB;  // 0xFB + 0x05 = 0x100, wraps to 0x00
     cpu.memory[0x00] = 0x40;  // Indirect address
     cpu.memory[0x40] = 0xAB;  // Final value

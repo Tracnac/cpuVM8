@@ -19,6 +19,12 @@ extern void POP_test(void);
 extern void PUSH_test(void);
 extern void CMP_test(void);
 extern void CPX_test(void);
+extern void ROR_test(void);
+extern void ROL_test(void);
+extern void SHR_test(void);
+extern void SHL_test(void);
+extern void INX_test(void);
+extern void DEX_test(void);
 extern void edge_cases_test(void);
 
 int main(void) {
@@ -41,6 +47,12 @@ int main(void) {
     RUN_TEST(PUSH_test);
     RUN_TEST(CMP_test);
     RUN_TEST(CPX_test);
+    RUN_TEST(ROR_test);
+    RUN_TEST(ROL_test);
+    RUN_TEST(SHR_test);
+    RUN_TEST(SHL_test);
+    RUN_TEST(INX_test);
+    RUN_TEST(DEX_test);
     RUN_TEST(edge_cases_test);
     return UNITY_END();
 }
