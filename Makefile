@@ -16,6 +16,9 @@ LEAK_ENV =
 LDFLAGS =
 endif
 
+CFLAGS_OPT = -O3 -march=native -mtune=native -flto -pipe -fomit-frame-pointer \
+         -funroll-loops -finline-functions
+
 # Generate dependency files
 CFLAGS += -MMD -MP
 
@@ -36,7 +39,8 @@ OBJS = $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRCS))
 DEPS = $(patsubst %.c,$(OBJ_DIR)/%.d,$(SRCS))
 
 TARGET = $(BIN_DIR)/cpuvm8
-BENCH_TARGET = $(BIN_DIR)/benchmark
+BENCH_TARGET = benchmark
+MICROBENCH_TARGET = microbenchmark
 
 # --- TESTS AUTOMATION ---
 # Find all test source files matching *_test.c
@@ -95,12 +99,19 @@ run: $(TARGET)
 tests: $(TEST_BIN)
 	./$(TEST_BIN)
 
-# Benchmark targets
-$(BENCH_TARGET): benchmark.c | $(BIN_DIR)
-	$(CC) $(CFLAGS) -o $@ $<
+# Benchmark targets is always built with optimizations
+$(BENCH_TARGET): tools/benchmark.c | $(BIN_DIR)
+	$(CC) $(CFLAGS_OPT) -o build/benchmark $<
 
-benchmark: $(BENCH_TARGET)
-	./$(BENCH_TARGET)
+# benchmark: $(BENCH_TARGET)
+# 	./$(BENCH_TARGET)
+
+# microbenchmark targets is always built with optimizations
+$(MICROBENCH_TARGET): tools/microbenchmark.c | $(BIN_DIR)
+		$(CC) $(CFLAGS_OPT) -o build/microbenchmark $<
+
+# microbenchmark: $(MICROBENCH_TARGET)
+# 		./$(BENCH_TARGET)
 
 help:
 	@echo ""
@@ -118,8 +129,8 @@ help:
 	@echo "  release            - Build main app in release mode"
 	@echo "  tests-debug        - Build and run tests in debug mode"
 	@echo "  tests-release      - Build and run tests in release mode"
-	@echo "  benchmark-debug    - Build and run benchmark in debug mode"
-	@echo "  benchmark-release  - Build and run benchmark in release mode"
+	@echo "  benchmark          - Build benchmark in release mode"
+	@echo "  microbenchmark     - Build microbenchmark in release mode"
 	@echo "  run-debug          - Build and run main app in debug mode"
 	@echo "  run-release        - Build and run main app in release mode"
 	@echo ""
@@ -130,12 +141,10 @@ status:
 	@echo "DEBUG BUILD:"
 	@if [ -f "build/debug/bin/cpuvm8" ]; then echo "  ✓ Main binary: build/debug/bin/cpuvm8"; else echo "  ✗ Main binary: not built"; fi
 	@if [ -f "build/debug/bin/cpuVM8_test" ]; then echo "  ✓ Test binary: build/debug/bin/cpuVM8_test"; else echo "  ✗ Test binary: not built"; fi
-	@if [ -f "build/debug/bin/benchmark" ]; then echo "  ✓ Benchmark binary: build/debug/bin/benchmark"; else echo "  ✗ Benchmark binary: not built"; fi
 	@echo ""
 	@echo "RELEASE BUILD:"
 	@if [ -f "build/release/bin/cpuvm8" ]; then echo "  ✓ Main binary: build/release/bin/cpuvm8"; else echo "  ✗ Main binary: not built"; fi
 	@if [ -f "build/release/bin/cpuVM8_test" ]; then echo "  ✓ Test binary: build/release/bin/cpuVM8_test"; else echo "  ✗ Test binary: not built"; fi
-	@if [ -f "build/release/bin/benchmark" ]; then echo "  ✓ Benchmark binary: build/release/bin/benchmark"; else echo "  ✗ Benchmark binary: not built"; fi
 	@echo ""
 	@echo "Default build mode for 'make' commands: $(BUILD)"
 
@@ -157,9 +166,3 @@ run-debug:
 
 run-release:
 	$(MAKE) BUILD=release run
-
-benchmark-debug:
-	$(MAKE) BUILD=debug benchmark
-
-benchmark-release:
-	$(MAKE) BUILD=release benchmark

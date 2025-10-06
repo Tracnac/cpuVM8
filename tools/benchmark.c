@@ -1,4 +1,4 @@
-#include "cpu.h"
+#include "../cpu.h"
 
 // Test programs
 static void load_simple_loop(CPU *cpu) {
