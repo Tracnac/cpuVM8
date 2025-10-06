@@ -7,6 +7,12 @@
 #include <string.h>
 #include <time.h>
 
+/* Packing helpers: 5-bit opcode + 3-bit mode */
+#define PACK_INST_BYTE(opcode, mode)                                           \
+  ((uint8_t)((((mode) & 0x7) << 5) | ((opcode) & 0x1F)))
+#define UNPACK_OPCODE(b) ((uint8_t)((b) & 0x1F))
+#define UNPACK_MODE(b) ((uint8_t)(((b) >> 5) & 0x07))
+
 // Easy memory mapping with 256 bytes total
 /*
  * 0x00-0xEF : Code (240 bytes)
@@ -48,24 +54,28 @@ enum {
   OPCODE_LDX,        // Load Register X
   OPCODE_STA,        // Store Accumulator
   OPCODE_STX,        // Store Register X
+  OPCODE_B,          // B NE, B EQ, B AL ...
   OPCODE_ADD,        // Add
   OPCODE_SUB,        // Subtract
   OPCODE_XOR,        // Exclusive OR
   OPCODE_AND,        // AND
   OPCODE_OR,         // OR
-  OPCODE_B,          // B NE, B EQ, B AL ...
   OPCODE_POP,        // Pop from Stack
   OPCODE_PUSH,       // Push to Stack
   OPCODE_CMP,        // Compare (sets flags without storing result)
   OPCODE_CPX,        // Compare X register (sets flags without storing result)
-  OPCODE_HALT,       // Halt
   OPCODE_ROR,        // Rotate Right
   OPCODE_ROL,        // Rotate Left
   OPCODE_SHR,        // Shift Right
   OPCODE_SHL,        // Shift Left
   OPCODE_INX,        // Increment X
   OPCODE_DEX,        // Decrement X
+  OPCODE_HALT,       // Halt
+
+  OPCODE_COUNT // Number of opcodes (DON'T REMOVE)
 };
+_Static_assert(OPCODE_COUNT <= 256, "too many opcodes");
+_Static_assert(OPCODE_COUNT <= 32, "too many opcodes for packed format");
 
 // Addressing modes
 enum {
@@ -75,7 +85,11 @@ enum {
   MODE_INDIRECT,        // Indirect:   [$address]
   MODE_INDIRECT_X,      // Indirect Indexed: [$address,X]
   MODE_REGISTER,        // REGISTERS (Not used yet)
+
+  MODE_COUNT // Number of addressing modes (DON'T REMOVE)
 };
+_Static_assert(MODE_COUNT <= 256, "too many addressing modes");
+_Static_assert(MODE_COUNT <= 8, "too many addressing modes for packed format");
 
 // Branch conditions (byte après OPCODE_B)
 enum {
@@ -100,6 +114,8 @@ typedef struct {
 
 // Define a function pointer type for opcode handlers
 typedef int (*opcode_handler)(CPU *, uint8_t, uint8_t);
+/* CPU Step function pointer type */
+typedef int (*cpu_step_fn)(CPU *);
 
 // ============================================================================
 // OPCODE HANDLERS
@@ -768,7 +784,7 @@ static int op_dex(CPU *cpu, uint8_t mode, uint8_t operand) {
 }
 
 // Table de dispatch
-static const opcode_handler handlers[22] = {
+static const opcode_handler handlers[OPCODE_COUNT] = {
     [OPCODE_NOP] = op_nop,   [OPCODE_LDA] = op_lda,  [OPCODE_LDX] = op_ldx,
     [OPCODE_ADD] = op_add,   [OPCODE_SUB] = op_sub,  [OPCODE_XOR] = op_xor,
     [OPCODE_STA] = op_sta,   [OPCODE_STX] = op_stx,  [OPCODE_AND] = op_and,
@@ -778,6 +794,9 @@ static const opcode_handler handlers[22] = {
     [OPCODE_SHR] = op_shr,   [OPCODE_SHL] = op_shl,  [OPCODE_INX] = op_inx,
     [OPCODE_DEX] = op_dex,
 };
+
+_Static_assert(OPCODE_COUNT == (sizeof handlers / sizeof handlers[0]),
+               "opcode count mismatch");
 
 // CPU initialization
 static inline void initCPU(CPU *cpu) {
@@ -790,7 +809,7 @@ static inline int cpu_step(CPU *cpu) {
 
   // Fetch
   uint8_t opcode = cpu->memory[cpu->PC++];
-  if (opcode >= 22 || !handlers[opcode])
+  if (opcode >= OPCODE_COUNT || !handlers[opcode])
     return CPU_ERROR;
 
   // Check HALT
@@ -805,21 +824,43 @@ static inline int cpu_step(CPU *cpu) {
   return handlers[opcode](cpu, mode, operand);
 }
 
-static inline void cpu_run(CPU *cpu) {
+/* cpu_run that accepts a step-function pointer.
+   We capture the instruction start PC (prev_pc) so the reporting works
+   independently of the exact decoding/length policy of the step function. */
+static inline void cpu_run(CPU *cpu, cpu_step_fn step) {
   int result;
   while (1) {
-    result = cpu_step(cpu);
+    uint8_t prev_pc = cpu->PC;     /* instruction start (for reporting) */
+    result = step(cpu);
 
-    if (result == 1) {
-      // HALT rencontré
-      printf("CPU HALTED at PC=0x%02X\n", cpu->PC - 1);
+    if (result == CPU_HALT) {
+      printf("CPU HALTED at PC=0x%02X\n", prev_pc);
       break;
-    } else if (result == -1) {
-      // Erreur
-      printf("CPU ERROR at PC=0x%02X\n", cpu->PC - 3);
+    } else if (result == CPU_ERROR) {
+      printf("CPU ERROR at PC=0x%02X\n", prev_pc);
       break;
     }
   }
+}
+
+static inline int cpu_step_packed(CPU *cpu) {
+
+  /* Fetch packed byte */
+  uint8_t packed = cpu->memory[cpu->PC++];
+
+  uint8_t opcode = UNPACK_OPCODE(packed);
+  uint8_t mode = UNPACK_MODE(packed);
+
+  if (opcode >= OPCODE_COUNT || !handlers[opcode])
+    return CPU_ERROR;
+
+  if (opcode == OPCODE_HALT)
+    return CPU_HALT;
+
+  /* Fetch operand (still one byte) */
+  uint8_t operand = cpu->memory[cpu->PC++];
+
+  return handlers[opcode](cpu, mode, operand);
 }
 
 #endif // CPU_H
