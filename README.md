@@ -14,77 +14,86 @@
 ```c
 // Registers
 enum {
-    REG_A = 0,
-    REG_X,
-    REG_PC, // Program Counter
-    REG_SP, // Stack Pointer
+  REG_A = 0, // Accumulator
+  REG_X,     // Index register
+  REG_PC,    // Program Counter
+  REG_SP,    // Stack Pointer
 };
 
 // Flags
 enum {
-    FLAG_CARRY     = 1 << 0,
-    FLAG_ZERO      = 1 << 1,
-    FLAG_NEGATIVE  = 1 << 2,
-    FLAG_OVERFLOW  = 1 << 3,
-    FLAG_ERROR     = 1 << 4
+  FLAG_CARRY = 1 << 0,    // Carry C
+  FLAG_ZERO = 1 << 1,     // Zero Z
+  FLAG_NEGATIVE = 1 << 2, // Negative N
+  FLAG_OVERFLOW = 1 << 3, // Overflow O
+  FLAG_HALTED =
+      1 << 4 // Halted state, Error (invalid instruction, memory access, etc.)
 };
 
 // Opcodes
 enum {
-    OPCODE_NOP     = 0x00, // No Operation
-    OPCODE_LDA     = 0x01, // Load Accumulator
-    OPCODE_LDX     = 0x02, // Load Register X
-    OPCODE_STA     = 0x03, // Store Accumulator
-    OPCODE_STX     = 0x04, // Store Register X
-    OPCODE_ADD     = 0x05, // Add
-    OPCODE_SUB     = 0x06, // Subtract
-    OPCODE_XOR     = 0x07, // Exclusive OR
-    OPCODE_AND     = 0x08, // AND
-    OPCODE_OR      = 0x09, // OR
-    OPCODE_B       = 0x0A, // B NE, B EQ, B AL ...
-    OPCODE_POP     = 0x0B, // Pop from Stack
-    OPCODE_PUSH    = 0x0C, // Push to Stack
-    OPCODE_CMP     = 0x0D, // Compare (sets flags without storing result)
-    OPCODE_CPX     = 0x0E, // Compare X register (sets flags without storing result)
-    OPCODE_HALT    = 0x0F, // Halt
-    OPCODE_ROR     = 0x10, // Rotate Right
-    OPCODE_ROL     = 0x11, // Rotate Left
-    OPCODE_SHR     = 0x12, // Shift Right
-    OPCODE_SHL     = 0x13, // Shift Left
-    OPCODE_INX     = 0x14, // Increment X
-    OPCODE_DEX     = 0x15  // Decrement X
+  OPCODE_NOP = 0x00, // No Operation
+  OPCODE_LDA,        // Load Accumulator
+  OPCODE_LDX,        // Load Register X
+  OPCODE_STA,        // Store Accumulator
+  OPCODE_STX,        // Store Register X
+  OPCODE_B,          // B NE, B EQ, B AL ...
+  OPCODE_ADD,        // Add
+  OPCODE_SUB,        // Subtract
+  OPCODE_XOR,        // Exclusive OR
+  OPCODE_AND,        // AND
+  OPCODE_OR,         // OR
+  OPCODE_POP,        // Pop from Stack
+  OPCODE_PUSH,       // Push to Stack
+  OPCODE_CMP,        // Compare (sets flags without storing result)
+  OPCODE_CPX,        // Compare X register (sets flags without storing result)
+  OPCODE_ROR,        // Rotate Right
+  OPCODE_ROL,        // Rotate Left
+  OPCODE_SHR,        // Shift Right
+  OPCODE_SHL,        // Shift Left
+  OPCODE_INX,        // Increment X
+  OPCODE_DEX,        // Decrement X
+  OPCODE_HALT,       // Halt
+
+  OPCODE_COUNT // Number of opcodes (DON'T REMOVE)
 };
+_Static_assert(OPCODE_COUNT <= 256, "too many opcodes");
+_Static_assert(OPCODE_COUNT <= 32, "too many opcodes for packed format");
 
 // Addressing modes
 enum {
-    MODE_IMMEDIAT  = 0x00,   // Immediate:  #value
-    MODE_ABSOLUTE  = 0x01,   // Absolute:   address
-    MODE_ABSOLUTE_X  = 0x02, // Indexed:    address,X
-    MODE_INDIRECT  = 0x03,   // Indirect:   [$address]
-    MODE_INDIRECT_X = 0x04,  // Indirect Indexed: [$address,X]
-    MODE_REGISTER = 0x05     // REGISTER A
+  MODE_IMMEDIAT = 0x00, // Immediate:  #value
+  MODE_ABSOLUTE,        // Absolute:   address
+  MODE_ABSOLUTE_X,      // Indexed:    address,X
+  MODE_INDIRECT,        // Indirect:   [$address]
+  MODE_INDIRECT_X,      // Indirect Indexed: [$address,X]
+  MODE_REGISTER,        // REGISTERS (Not used yet)
+
+  MODE_COUNT // Number of addressing modes (DON'T REMOVE)
 };
+_Static_assert(MODE_COUNT <= 256, "too many addressing modes");
+_Static_assert(MODE_COUNT <= 8, "too many addressing modes for packed format");
 
 // Branch conditions (byte après OPCODE_B)
 enum {
-    COND_AL  = 0x00,  // Always (unconditional jump)
-    COND_EQ  = 0x01,  // Equal (Z=1)
-    COND_NE  = 0x02,  // Not Equal (Z=0)
-    COND_CS  = 0x03,  // Carry Set (C=1)
-    COND_CC  = 0x04,  // Carry Clear (C=0)
-    COND_MI  = 0x05,  // Minus/Negative (N=1)
-    COND_PL  = 0x06,  // Plus/Positive (N=0)
+  COND_AL = 0x00, // Always (unconditional jump)
+  COND_EQ,        // Equal (Z=1)
+  COND_NE,        // Not Equal (Z=0)
+  COND_CS,        // Carry Set (C=1)
+  COND_CC,        // Carry Clear (C=0)
+  COND_MI,        // Minus/Negative (N=1)
+  COND_PL,        // Plus/Positive (N=0)
 };
 
 // CPU
 typedef struct {
-    uint8_t A;      // Accumulator
-    uint8_t X;      // Index register
-    uint8_t PC;     // Program Counter
-    uint8_t SP;     // Stack Pointer
-    uint8_t flags;  // Status flags
-    uint8_t memory[MAX_MEMORY_SIZE];
-} CPU __attribute__((aligned(64)));
+  uint8_t A;                        // Accumulator
+  uint8_t X;                        // Index register
+  uint8_t PC;                       // Program Counter
+  uint8_t SP;                       // Stack Pointer
+  uint8_t flags;                    // Status flags·
+  uint8_t memory[MAX_MEMORY_SIZE];  // 256 bytes of memory
+} CPU __attribute__((aligned(64))); // Align to cache line size for performance
 ```
 
 | ADDRESSING MODE       | SYNTAX                | DESCRIPTION & EXAMPLES                                       |
