@@ -18,12 +18,13 @@ int main(int argc, char *argv[]) {
   initCPU(&cpu);
 
   // Programme de test (boucle simple)
-  cpu.memory[0] = OPCODE_LDA;
-  cpu.memory[1] = MODE_IMMEDIAT;
-  cpu.memory[2] = 42;
-  cpu.memory[3] = OPCODE_B;
-  cpu.memory[4] = COND_AL;
-  cpu.memory[5] = 0; // Jump à 0 (boucle infinie)
+  uint8_t program[] = {
+      OPCODE_NOP,
+      0,
+      0 // End
+  };
+
+  memcpy(cpu.memory, program, sizeof(program));
 
   struct timespec start, now;
   clock_gettime(CLOCK_MONOTONIC, &start);
