@@ -13,16 +13,35 @@
 #define UNPACK_OPCODE(b) ((uint8_t)((b) & 0x1F))
 #define UNPACK_MODE(b) ((uint8_t)(((b) >> 5) & 0x07))
 
+/* Performance optimization macros */
+#define LIKELY(x) __builtin_expect(!!(x), 1)
+#define UNLIKELY(x) __builtin_expect(!!(x), 0)
+
+/* Branchless flag update helpers for better performance */
+#define UPDATE_ZN_FLAGS(cpu, value)                                            \
+  do {                                                                         \
+    (cpu)->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);                              \
+    (cpu)->flags |= ((value) == 0) ? FLAG_ZERO : 0;                            \
+    (cpu)->flags |= ((value) & 0x80) ? FLAG_NEGATIVE : 0;                      \
+  } while (0)
+
+#define UPDATE_ZNC_FLAGS(cpu, value, carry_condition)                          \
+  do {                                                                         \
+    (cpu)->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE | FLAG_CARRY);                 \
+    (cpu)->flags |= ((value) == 0) ? FLAG_ZERO : 0;                            \
+    (cpu)->flags |= ((value) & 0x80) ? FLAG_NEGATIVE : 0;                      \
+    (cpu)->flags |= (carry_condition) ? FLAG_CARRY : 0;                        \
+  } while (0)
+
 // Easy memory mapping with 256 bytes total
 /*
  * 0x00-0xEF : Code (240 bytes)
  * 0xF0-0xFF : Stack (16 bytes)
  */
 
-// Retour de cpu_step
-#define CPU_ERROR -1
+// Legacy constants (kept for compatibility)
 #define CPU_OK 0
-#define CPU_HALT 1
+#define CPU_HALTED -1
 
 // Memory layout
 #define CODE_BASE 0x00
@@ -44,7 +63,8 @@ enum {
   FLAG_ZERO = 1 << 1,     // Zero Z
   FLAG_NEGATIVE = 1 << 2, // Negative N
   FLAG_OVERFLOW = 1 << 3, // Overflow O
-  FLAG_ERROR = 1 << 4     // Error (invalid instruction, memory access, etc.)
+  FLAG_HALTED =
+      1 << 4 // Halted state, Error (invalid instruction, memory access, etc.)
 };
 
 // Opcodes
@@ -112,470 +132,236 @@ typedef struct {
   uint8_t memory[MAX_MEMORY_SIZE];  // 256 bytes of memory
 } CPU __attribute__((aligned(64))); // Align to cache line size for performance
 
+/* Fast address calculation helper used by STA, STX */
+static inline uint8_t get_effective_address(const CPU *cpu, uint8_t mode,
+                                            uint8_t operand) {
+  switch (mode) {
+  case MODE_ABSOLUTE:
+    return operand;
+  case MODE_ABSOLUTE_X:
+    return (operand + cpu->X) & 0xFF;
+  case MODE_INDIRECT:
+    return cpu->memory[operand];
+  case MODE_INDIRECT_X:
+    return cpu->memory[(operand + cpu->X) & 0xFF];
+  }
+  __builtin_unreachable();  // Unreachable - mode validated in cpu_step
+}
+
+/* Fast value retrieval helper for instructions that read memory */
+static inline uint8_t get_operand_value(const CPU *cpu, uint8_t mode,
+                                        uint8_t operand) {
+  switch (mode) {
+  case MODE_IMMEDIAT:
+    return operand;
+  case MODE_ABSOLUTE:
+    return cpu->memory[operand];
+  case MODE_ABSOLUTE_X:
+    return cpu->memory[(operand + cpu->X) & 0xFF];
+  case MODE_INDIRECT:
+    return cpu->memory[cpu->memory[operand]];
+  case MODE_INDIRECT_X:
+    return cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
+  }
+  __builtin_unreachable();  // Unreachable - mode validated in cpu_step
+}
+
 // Define a function pointer type for opcode handlers
-typedef int (*opcode_handler)(CPU *, uint8_t, uint8_t);
+typedef void (*opcode_handler)(CPU *, uint8_t, uint8_t);
 /* CPU Step function pointer type */
 typedef int (*cpu_step_fn)(CPU *);
 
 // ============================================================================
-// OPCODE HANDLERS
+// OPCODE HANDLERS - OPTIMIZED FOR PERFORMANCE
 // ============================================================================
 
-static inline int op_nop(CPU *cpu, uint8_t mode, uint8_t operand) {
+static inline void op_nop(CPU *cpu, uint8_t mode, uint8_t operand) {
   (void)cpu;
   (void)mode;
   (void)operand;
-  return CPU_OK;
 }
 
-static inline int op_lda(CPU *cpu, uint8_t mode, uint8_t operand) {
-  switch (mode) {
-  case MODE_IMMEDIAT:
-    cpu->A = operand;
-    break;
-  case MODE_ABSOLUTE:
-    cpu->A = cpu->memory[operand];
-    break;
-  case MODE_ABSOLUTE_X:
-    cpu->A = cpu->memory[(operand + cpu->X) & 0xFF];
-    break;
-  case MODE_INDIRECT:
-    cpu->A = cpu->memory[cpu->memory[operand]];
-    break;
-  case MODE_INDIRECT_X:
-    cpu->A = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
-    break;
-  default:
-    cpu->flags |= FLAG_ERROR;
-    return CPU_ERROR;
-  }
-
-  // Update flags Zero et Sign
-  cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);
-  if (cpu->A == 0)
-    cpu->flags |= FLAG_ZERO;
-  if (cpu->A & 0x80)
-    cpu->flags |= FLAG_NEGATIVE;
-  return CPU_OK;
+static inline void op_lda(CPU *cpu, uint8_t mode, uint8_t operand) {
+  cpu->A = get_operand_value(cpu, mode, operand);
+  UPDATE_ZN_FLAGS(cpu, cpu->A);
 }
 
-static int op_ldx(CPU *cpu, uint8_t mode, uint8_t operand) {
-  switch (mode) {
-  case MODE_IMMEDIAT:
-    cpu->X = operand;
-    break;
-  case MODE_ABSOLUTE:
-    cpu->X = cpu->memory[operand];
-    break;
-  case MODE_INDIRECT:
-    cpu->X = cpu->memory[cpu->memory[operand]];
-    break;
-  default:
-    cpu->flags |= FLAG_ERROR;
-    return CPU_ERROR;
-  }
-
-  // Update flags Zero et Sign
-  cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);
-  if (cpu->X == 0)
-    cpu->flags |= FLAG_ZERO;
-  if (cpu->X & 0x80)
-    cpu->flags |= FLAG_NEGATIVE;
-  return CPU_OK;
+static void op_ldx(CPU *cpu, uint8_t mode, uint8_t operand) {
+  cpu->X = get_operand_value(cpu, mode, operand);
+  UPDATE_ZN_FLAGS(cpu, cpu->X);
 }
 
-static inline int op_sta(CPU *cpu, uint8_t mode, uint8_t operand) {
-  switch (mode) {
-  case MODE_ABSOLUTE:
-    cpu->memory[operand] = cpu->A;
-    break;
-  case MODE_ABSOLUTE_X:
-    cpu->memory[(operand + cpu->X) & 0xFF] = cpu->A;
-    break;
-  case MODE_INDIRECT:
-    cpu->memory[cpu->memory[operand]] = cpu->A;
-    break;
-  case MODE_INDIRECT_X:
-    cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]] = cpu->A;
-    break;
-  default:
-    cpu->flags |= FLAG_ERROR;
-    return CPU_ERROR;
-  }
-  return CPU_OK;
+static inline void op_sta(CPU *cpu, uint8_t mode, uint8_t operand) {
+  uint8_t address = get_effective_address(cpu, mode, operand);
+  cpu->memory[address] = cpu->A;
 }
 
-static int op_stx(CPU *cpu, uint8_t mode, uint8_t operand) {
-  switch (mode) {
-  case MODE_ABSOLUTE:
-    cpu->memory[operand] = cpu->X;
-    break;
-  case MODE_INDIRECT:
-    cpu->memory[cpu->memory[operand]] = cpu->X;
-    break;
-  default:
-    cpu->flags |= FLAG_ERROR;
-    return CPU_ERROR;
-  }
-  return CPU_OK;
+static void op_stx(CPU *cpu, uint8_t mode, uint8_t operand) {
+  uint8_t address = get_effective_address(cpu, mode, operand);
+  cpu->memory[address] = cpu->X;
 }
 
-static int op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
-  uint8_t value = 0;
-  switch (mode) {
-  case MODE_IMMEDIAT:
-    value = operand;
-    break;
-  case MODE_ABSOLUTE:
-    value = cpu->memory[operand];
-    break;
-  case MODE_ABSOLUTE_X:
-    value = cpu->memory[(operand + cpu->X) & 0xFF];
-    break;
-  case MODE_INDIRECT:
-    value = cpu->memory[cpu->memory[operand]];
-    break;
-  case MODE_INDIRECT_X:
-    value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
-    break;
-  default:
-    cpu->flags |= FLAG_ERROR;
-    return CPU_ERROR;
-  }
+static void op_add(CPU *cpu, uint8_t mode, uint8_t operand) {
+  uint8_t value = get_operand_value(cpu, mode, operand);
 
-  uint8_t original_A = cpu->A; // Save original A value for overflow check
+  uint8_t original_A = cpu->A;
   uint16_t result = cpu->A + value;
   cpu->A = result & 0xFF;
 
-  // Update flags
-  cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE | FLAG_CARRY | FLAG_OVERFLOW);
+  // Use optimized macro for Z, N, C flags
+  UPDATE_ZNC_FLAGS(cpu, cpu->A, result > 0xFF);
 
-  if (cpu->A == 0)
-    cpu->flags |= FLAG_ZERO;
-  if (cpu->A & 0x80)
-    cpu->flags |= FLAG_NEGATIVE;
-  if (result > 0xFF)
-    cpu->flags |= FLAG_CARRY;
-
-  // Overflow: signes identiques donnent résultat de signe différent
-  if (((original_A ^ value) & 0x80) == 0 && ((original_A ^ cpu->A) & 0x80) != 0)
-    cpu->flags |= FLAG_OVERFLOW;
-
-  return CPU_OK;
+  // Handle overflow flag separately (not in macro)
+  cpu->flags &= ~FLAG_OVERFLOW;
+  cpu->flags |= (((original_A ^ value) & 0x80) == 0 &&
+                 ((original_A ^ cpu->A) & 0x80) != 0)
+                    ? FLAG_OVERFLOW
+                    : 0;
 }
 
-static int op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
-  uint8_t value = 0;
-  switch (mode) {
-  case MODE_IMMEDIAT:
-    value = operand;
-    break;
-  case MODE_ABSOLUTE:
-    value = cpu->memory[operand];
-    break;
-  case MODE_ABSOLUTE_X:
-    value = cpu->memory[(operand + cpu->X) & 0xFF];
-    break;
-  case MODE_INDIRECT:
-    value = cpu->memory[cpu->memory[operand]];
-    break;
-  case MODE_INDIRECT_X:
-    value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
-    break;
-  default:
-    cpu->flags |= FLAG_ERROR;
-    return CPU_ERROR;
-  }
+static void op_sub(CPU *cpu, uint8_t mode, uint8_t operand) {
+  uint8_t value = get_operand_value(cpu, mode, operand);
 
-  uint8_t original_A = cpu->A; // Save original A value for overflow check
+  uint8_t original_A = cpu->A;
   uint16_t result = cpu->A - value;
   cpu->A = result & 0xFF;
 
-  // Update flags
-  cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE | FLAG_CARRY | FLAG_OVERFLOW);
+  // Use optimized macro for Z, N, C flags
+  UPDATE_ZNC_FLAGS(cpu, cpu->A, result < 0x100);
 
-  if (cpu->A == 0)
-    cpu->flags |= FLAG_ZERO;
-  if (cpu->A & 0x80)
-    cpu->flags |= FLAG_NEGATIVE;
-  if (result < 0x100) // Pas de borrow
-    cpu->flags |= FLAG_CARRY;
-
-  // Overflow pour soustraction: operands have different signs and result has
-  // different sign from minuend
-  if (((original_A ^ value) & 0x80) != 0 && ((original_A ^ cpu->A) & 0x80) != 0)
-    cpu->flags |= FLAG_OVERFLOW;
-
-  return CPU_OK;
+  // Handle overflow flag separately (not in macro)
+  cpu->flags &= ~FLAG_OVERFLOW;
+  cpu->flags |= (((original_A ^ value) & 0x80) != 0 &&
+                 ((original_A ^ cpu->A) & 0x80) != 0)
+                    ? FLAG_OVERFLOW
+                    : 0;
 }
 
-static int op_and(CPU *cpu, uint8_t mode, uint8_t operand) {
-  uint8_t value;
-  switch (mode) {
-  case MODE_IMMEDIAT:
-    value = operand;
-    break;
-  case MODE_ABSOLUTE:
-    value = cpu->memory[operand];
-    break;
-  case MODE_ABSOLUTE_X:
-    value = cpu->memory[(operand + cpu->X) & 0xFF];
-    break;
-  case MODE_INDIRECT:
-    value = cpu->memory[cpu->memory[operand]];
-    break;
-  case MODE_INDIRECT_X:
-    value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
-    break;
-  default:
-    cpu->flags |= FLAG_ERROR;
-    return CPU_ERROR;
-  }
+static void op_and(CPU *cpu, uint8_t mode, uint8_t operand) {
+  uint8_t value = get_operand_value(cpu, mode, operand);
 
   cpu->A &= value;
-
-  // Update flags Zero et Sign
-  cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);
-  if (cpu->A == 0)
-    cpu->flags |= FLAG_ZERO;
-  if (cpu->A & 0x80)
-    cpu->flags |= FLAG_NEGATIVE;
-  return CPU_OK;
+  UPDATE_ZN_FLAGS(cpu, cpu->A);
 }
 
-static int op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
-  uint8_t value;
-  switch (mode) {
-  case MODE_IMMEDIAT:
-    value = operand;
-    break;
-  case MODE_ABSOLUTE:
-    value = cpu->memory[operand];
-    break;
-  case MODE_ABSOLUTE_X:
-    value = cpu->memory[(operand + cpu->X) & 0xFF];
-    break;
-  case MODE_INDIRECT:
-    value = cpu->memory[cpu->memory[operand]];
-    break;
-  case MODE_INDIRECT_X:
-    value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
-    break;
-  default:
-    cpu->flags |= FLAG_ERROR;
-    return CPU_ERROR;
-  }
+static void op_xor(CPU *cpu, uint8_t mode, uint8_t operand) {
+  uint8_t value = get_operand_value(cpu, mode, operand);
 
   cpu->A ^= value;
-
-  cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);
-  if (cpu->A == 0)
-    cpu->flags |= FLAG_ZERO;
-  if (cpu->A & 0x80)
-    cpu->flags |= FLAG_NEGATIVE;
-
-  return CPU_OK;
+  UPDATE_ZN_FLAGS(cpu, cpu->A);
 }
 
-static int op_or(CPU *cpu, uint8_t mode, uint8_t operand) {
-  uint8_t value = 0;
-  switch (mode) {
-  case MODE_IMMEDIAT:
-    value = operand;
-    break;
-  case MODE_ABSOLUTE:
-    value = cpu->memory[operand];
-    break;
-  case MODE_ABSOLUTE_X:
-    value = cpu->memory[(operand + cpu->X) & 0xFF];
-    break;
-  case MODE_INDIRECT:
-    value = cpu->memory[cpu->memory[operand]];
-    break;
-  case MODE_INDIRECT_X:
-    value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
-    break;
-  default:
-    cpu->flags |= FLAG_ERROR;
-    return CPU_ERROR;
-  }
+static void op_or(CPU *cpu, uint8_t mode, uint8_t operand) {
+  uint8_t value = get_operand_value(cpu, mode, operand);
 
   cpu->A |= value;
-
-  cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);
-  if (cpu->A == 0)
-    cpu->flags |= FLAG_ZERO;
-  if (cpu->A & 0x80)
-    cpu->flags |= FLAG_NEGATIVE;
-
-  return CPU_OK;
+  UPDATE_ZN_FLAGS(cpu, cpu->A);
 }
 
-static int op_branch(CPU *cpu, uint8_t condition, uint8_t address) {
-  int should_branch = 0;
-
+// Optimized branch instruction - most common cases first
+static void op_branch(CPU *cpu, uint8_t condition, uint8_t address) {
+  // Optimize for most common conditions with direct flag checks
   switch (condition) {
-  case COND_AL: // Always
-    should_branch = 1;
+  case COND_AL: // Always - most common, unconditional
+    cpu->PC = address;
     break;
-  case COND_EQ: // Equal (Z=1)
-    should_branch = (cpu->flags & FLAG_ZERO) != 0;
+  case COND_EQ: // Equal (Z=1) - very common
+    if (LIKELY(cpu->flags & FLAG_ZERO))
+      cpu->PC = address;
     break;
-  case COND_NE: // Not Equal (Z=0)
-    should_branch = (cpu->flags & FLAG_ZERO) == 0;
+  case COND_NE: // Not Equal (Z=0) - very common
+    if (LIKELY(!(cpu->flags & FLAG_ZERO)))
+      cpu->PC = address;
     break;
   case COND_CS: // Carry Set (C=1)
-    should_branch = (cpu->flags & FLAG_CARRY) != 0;
+    if (cpu->flags & FLAG_CARRY)
+      cpu->PC = address;
     break;
   case COND_CC: // Carry Clear (C=0)
-    should_branch = (cpu->flags & FLAG_CARRY) == 0;
+    if (!(cpu->flags & FLAG_CARRY))
+      cpu->PC = address;
     break;
   case COND_MI: // Minus/Negative (N=1)
-    should_branch = (cpu->flags & FLAG_NEGATIVE) != 0;
+    if (cpu->flags & FLAG_NEGATIVE)
+      cpu->PC = address;
     break;
   case COND_PL: // Plus/Positive (N=0)
-    should_branch = (cpu->flags & FLAG_NEGATIVE) == 0;
+    if (!(cpu->flags & FLAG_NEGATIVE))
+      cpu->PC = address;
     break;
   }
-
-  if (should_branch) {
-    cpu->PC = address;
-  }
-
-  return CPU_OK;
 }
 
-static int op_cmp(CPU *cpu, uint8_t mode, uint8_t operand) {
-  uint8_t value = 0;
-  switch (mode) {
-  case MODE_IMMEDIAT:
-    value = operand;
-    break;
-  case MODE_ABSOLUTE:
-    value = cpu->memory[operand];
-    break;
-  case MODE_ABSOLUTE_X:
-    value = cpu->memory[(operand + cpu->X) & 0xFF];
-    break;
-  case MODE_INDIRECT:
-    value = cpu->memory[cpu->memory[operand]];
-    break;
-  case MODE_INDIRECT_X:
-    value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
-    break;
-  default:
-    cpu->flags |= FLAG_ERROR;
-    return CPU_ERROR;
-  }
+static void op_cmp(CPU *cpu, uint8_t mode, uint8_t operand) {
+  uint8_t value = get_operand_value(cpu, mode, operand);
 
   // Perform comparison (A - value) without storing result
   uint8_t original_A = cpu->A;
   uint16_t result = cpu->A - value;
   uint8_t result_byte = result & 0xFF;
 
-  // Update flags
-  cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE | FLAG_CARRY | FLAG_OVERFLOW);
+  // Use optimized macro for Z, N, C flags
+  UPDATE_ZNC_FLAGS(cpu, result_byte, result < 0x100);
 
-  if (result_byte == 0)
-    cpu->flags |= FLAG_ZERO;
-  if (result_byte & 0x80)
-    cpu->flags |= FLAG_NEGATIVE;
-  if (result < 0x100) // No borrow
-    cpu->flags |= FLAG_CARRY;
-
-  // Overflow for comparison: operands have different signs and result has
-  // different sign from minuend
-  if (((original_A ^ value) & 0x80) != 0 &&
-      ((original_A ^ result_byte) & 0x80) != 0)
-    cpu->flags |= FLAG_OVERFLOW;
-
-  return CPU_OK;
+  // Handle overflow flag separately (not in macro)
+  cpu->flags &= ~FLAG_OVERFLOW;
+  cpu->flags |= (((original_A ^ value) & 0x80) != 0 &&
+                 ((original_A ^ result_byte) & 0x80) != 0)
+                    ? FLAG_OVERFLOW
+                    : 0;
 }
 
-static int op_cpx(CPU *cpu, uint8_t mode, uint8_t operand) {
-  uint8_t value = 0;
-  switch (mode) {
-  case MODE_IMMEDIAT:
-    value = operand;
-    break;
-  case MODE_ABSOLUTE:
-    value = cpu->memory[operand];
-    break;
-  case MODE_INDIRECT:
-    value = cpu->memory[cpu->memory[operand]];
-    break;
-  default:
-    cpu->flags |= FLAG_ERROR;
-    return CPU_ERROR;
-  }
+static void op_cpx(CPU *cpu, uint8_t mode, uint8_t operand) {
+  uint8_t value = get_operand_value(cpu, mode, operand);
 
   // Perform comparison (X - value) without storing result
   uint8_t original_X = cpu->X;
   uint16_t result = cpu->X - value;
   uint8_t result_byte = result & 0xFF;
 
-  // Update flags
-  cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE | FLAG_CARRY | FLAG_OVERFLOW);
+  // Use optimized macro for Z, N, C flags
+  UPDATE_ZNC_FLAGS(cpu, result_byte, result < 0x100);
 
-  if (result_byte == 0)
-    cpu->flags |= FLAG_ZERO;
-  if (result_byte & 0x80)
-    cpu->flags |= FLAG_NEGATIVE;
-  if (result < 0x100) // No borrow
-    cpu->flags |= FLAG_CARRY;
-
-  // Overflow for comparison: operands have different signs and result has
-  // different sign from minuend
-  if (((original_X ^ value) & 0x80) != 0 &&
-      ((original_X ^ result_byte) & 0x80) != 0)
-    cpu->flags |= FLAG_OVERFLOW;
-
-  return CPU_OK;
+  // Handle overflow flag separately (not in macro)
+  cpu->flags &= ~FLAG_OVERFLOW;
+  cpu->flags |= (((original_X ^ value) & 0x80) != 0 &&
+                 ((original_X ^ result_byte) & 0x80) != 0)
+                    ? FLAG_OVERFLOW
+                    : 0;
 }
 
-static int op_push(CPU *cpu, uint8_t mode, uint8_t operand) {
-  (void)mode;
-  (void)operand; // PUSH A
+static void op_push(CPU *cpu, uint8_t mode, uint8_t operand) {
+  (void)mode; (void)operand;
 
-  if (cpu->SP < (STACK_BASE - STACK_SIZE + 1)) { // Stack overflow check
-    cpu->flags |= FLAG_ERROR;
-    return CPU_ERROR;
+  if (UNLIKELY(cpu->SP < (STACK_BASE - STACK_SIZE + 1))) {
+    cpu->flags |= FLAG_HALTED;  // Stack overflow = halt CPU
+    return;
   }
 
   cpu->memory[cpu->SP] = cpu->A;
   cpu->SP--;
-  return CPU_OK;
 }
 
-static int op_pop(CPU *cpu, uint8_t mode, uint8_t operand) {
-  (void)mode;
-  (void)operand; // POP A
+static void op_pop(CPU *cpu, uint8_t mode, uint8_t operand) {
+  (void)mode; (void)operand;
 
-  if (cpu->SP >= STACK_BASE) { // Stack underflow check
-    cpu->flags |= FLAG_ERROR;
-    return CPU_ERROR;
+  if (UNLIKELY(cpu->SP >= STACK_BASE)) {
+    cpu->flags |= FLAG_HALTED;  // Stack underflow = halt CPU
+    return;
   }
 
   cpu->SP++;
   cpu->A = cpu->memory[cpu->SP];
-
-  // Update flags Zero et Sign
-  cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);
-  if (cpu->A == 0)
-    cpu->flags |= FLAG_ZERO;
-  if (cpu->A & 0x80)
-    cpu->flags |= FLAG_NEGATIVE;
-  return CPU_OK;
+  UPDATE_ZN_FLAGS(cpu, cpu->A);
 }
 
-static inline int op_halt(CPU *cpu, uint8_t mode, uint8_t operand) {
-  (void)cpu;
+static inline void op_halt(CPU *cpu, uint8_t mode, uint8_t operand) {
   (void)mode;
   (void)operand;
-  return CPU_HALT;
+  cpu->flags |= FLAG_HALTED;
 }
 
-static int op_ror(CPU *cpu, uint8_t mode, uint8_t operand) {
+static void op_ror(CPU *cpu, uint8_t mode, uint8_t operand) {
   uint8_t value = 0;
   uint8_t *target = NULL;
 
@@ -601,27 +387,18 @@ static int op_ror(CPU *cpu, uint8_t mode, uint8_t operand) {
     value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
     break;
   default:
-    cpu->flags |= FLAG_ERROR;
-    return CPU_ERROR;
+    return;
   }
 
   uint8_t old_carry = (cpu->flags & FLAG_CARRY) ? 1 : 0;
   uint8_t new_carry = value & 1;
-
   uint8_t result = (uint8_t)((value >> 1) | (old_carry << 7));
   *target = result;
 
-  cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE | FLAG_CARRY);
-  if (result == 0)
-    cpu->flags |= FLAG_ZERO;
-  if (result & 0x80)
-    cpu->flags |= FLAG_NEGATIVE;
-  if (new_carry)
-    cpu->flags |= FLAG_CARRY;
-  return CPU_OK;
+  UPDATE_ZNC_FLAGS(cpu, result, new_carry);
 }
 
-static int op_rol(CPU *cpu, uint8_t mode, uint8_t operand) {
+static void op_rol(CPU *cpu, uint8_t mode, uint8_t operand) {
   uint8_t value = 0;
   uint8_t *target = NULL;
 
@@ -647,27 +424,18 @@ static int op_rol(CPU *cpu, uint8_t mode, uint8_t operand) {
     value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
     break;
   default:
-    cpu->flags |= FLAG_ERROR;
-    return CPU_ERROR;
+    return;
   }
 
   uint8_t old_carry = (cpu->flags & FLAG_CARRY) ? 1 : 0;
   uint8_t new_carry = (value & 0x80) ? 1 : 0;
-
   uint8_t result = (uint8_t)((value << 1) | old_carry);
   *target = result;
 
-  cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE | FLAG_CARRY);
-  if (result == 0)
-    cpu->flags |= FLAG_ZERO;
-  if (result & 0x80)
-    cpu->flags |= FLAG_NEGATIVE;
-  if (new_carry)
-    cpu->flags |= FLAG_CARRY;
-  return CPU_OK;
+  UPDATE_ZNC_FLAGS(cpu, result, new_carry);
 }
 
-static int op_shr(CPU *cpu, uint8_t mode, uint8_t operand) {
+static void op_shr(CPU *cpu, uint8_t mode, uint8_t operand) {
   uint8_t value = 0;
   uint8_t *target = NULL;
 
@@ -693,25 +461,17 @@ static int op_shr(CPU *cpu, uint8_t mode, uint8_t operand) {
     value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
     break;
   default:
-    cpu->flags |= FLAG_ERROR;
-    return CPU_ERROR;
+    return;
   }
 
   uint8_t new_carry = value & 1;
   uint8_t result = value >> 1;
   *target = result;
 
-  cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE | FLAG_CARRY);
-  if (result == 0)
-    cpu->flags |= FLAG_ZERO;
-  if (result & 0x80)
-    cpu->flags |= FLAG_NEGATIVE;
-  if (new_carry)
-    cpu->flags |= FLAG_CARRY;
-  return CPU_OK;
+  UPDATE_ZNC_FLAGS(cpu, result, new_carry);
 }
 
-static int op_shl(CPU *cpu, uint8_t mode, uint8_t operand) {
+static void op_shl(CPU *cpu, uint8_t mode, uint8_t operand) {
   uint8_t value = 0;
   uint8_t *target = NULL;
 
@@ -737,53 +497,33 @@ static int op_shl(CPU *cpu, uint8_t mode, uint8_t operand) {
     value = cpu->memory[cpu->memory[(operand + cpu->X) & 0xFF]];
     break;
   default:
-    cpu->flags |= FLAG_ERROR;
-    return CPU_ERROR;
+    return;
   }
 
   uint8_t new_carry = (value & 0x80) ? 1 : 0;
   uint8_t result = (uint8_t)(value << 1);
   *target = result;
 
-  cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE | FLAG_CARRY);
-  if (result == 0)
-    cpu->flags |= FLAG_ZERO;
-  if (result & 0x80)
-    cpu->flags |= FLAG_NEGATIVE;
-  if (new_carry)
-    cpu->flags |= FLAG_CARRY;
-  return CPU_OK;
+  UPDATE_ZNC_FLAGS(cpu, result, new_carry);
 }
 
-static int op_inx(CPU *cpu, uint8_t mode, uint8_t operand) {
+static void op_inx(CPU *cpu, uint8_t mode, uint8_t operand) {
   (void)mode;
   (void)operand; // INX operates only on X register
 
   cpu->X++;
-
-  cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);
-  if (cpu->X == 0)
-    cpu->flags |= FLAG_ZERO;
-  if (cpu->X & 0x80)
-    cpu->flags |= FLAG_NEGATIVE;
-  return CPU_OK;
+  UPDATE_ZN_FLAGS(cpu, cpu->X);
 }
 
-static int op_dex(CPU *cpu, uint8_t mode, uint8_t operand) {
+static void op_dex(CPU *cpu, uint8_t mode, uint8_t operand) {
   (void)mode;
   (void)operand; // DEX operates only on X register
 
   cpu->X--;
-
-  cpu->flags &= ~(FLAG_ZERO | FLAG_NEGATIVE);
-  if (cpu->X == 0)
-    cpu->flags |= FLAG_ZERO;
-  if (cpu->X & 0x80)
-    cpu->flags |= FLAG_NEGATIVE;
-  return CPU_OK;
+  UPDATE_ZN_FLAGS(cpu, cpu->X);
 }
 
-// Table de dispatch
+// Optimized dispatch table with better cache layout
 static const opcode_handler handlers[OPCODE_COUNT] = {
     [OPCODE_NOP] = op_nop,   [OPCODE_LDA] = op_lda,  [OPCODE_LDX] = op_ldx,
     [OPCODE_ADD] = op_add,   [OPCODE_SUB] = op_sub,  [OPCODE_XOR] = op_xor,
@@ -798,30 +538,71 @@ static const opcode_handler handlers[OPCODE_COUNT] = {
 _Static_assert(OPCODE_COUNT == (sizeof handlers / sizeof handlers[0]),
                "opcode count mismatch");
 
-// CPU initialization
+// CPU initialization with optimized memset
 static inline void initCPU(CPU *cpu) {
   __builtin_memset(cpu, 0, sizeof(CPU));
   cpu->SP = STACK_BASE;
 }
 
-// cpu_step
+// ULTRA-OPTIMIZED cpu_step - void handlers, zero return value overhead
 static inline int cpu_step(CPU *cpu) {
-
-  // Fetch
+  // Fetch opcode with optimized error checking
   uint8_t opcode = cpu->memory[cpu->PC++];
-  if (opcode >= OPCODE_COUNT || !handlers[opcode])
-    return CPU_ERROR;
 
-  // Check HALT
-  if (opcode == OPCODE_HALT)
-    return CPU_HALT; // Signal HALT
+  if (UNLIKELY(opcode >= OPCODE_COUNT || !handlers[opcode])) {
+    cpu->flags |= FLAG_HALTED;
+    return CPU_HALTED;
+  }
 
-  // Fetch mode et operand
+  // Fetch mode and operand
   uint8_t mode = cpu->memory[cpu->PC++];
   uint8_t operand = cpu->memory[cpu->PC++];
 
-  // Execute
-  return handlers[opcode](cpu, mode, operand);
+  // Special case: Branch instruction uses condition, not mode
+  if (opcode == OPCODE_B) {
+    // Don't validate mode for branch - it's actually a condition
+  } else {
+    // Validate mode for all other instructions
+    if (UNLIKELY(mode >= MODE_COUNT)) {
+      cpu->flags |= FLAG_HALTED;
+      return CPU_HALTED;
+    }
+  }
+  // Execute instruction - no return value overhead!
+  handlers[opcode](cpu, mode, operand);
+  return (cpu->flags & FLAG_HALTED) ? CPU_HALTED : CPU_OK;
+}
+
+// cpu_step_packed - void handlers, zero return value overhead
+static inline int cpu_step_packed(CPU *cpu) {
+  /* Fetch packed byte */
+  uint8_t packed = cpu->memory[cpu->PC++];
+
+  uint8_t opcode = UNPACK_OPCODE(packed);
+  uint8_t mode = UNPACK_MODE(packed);
+
+  if (UNLIKELY(opcode >= OPCODE_COUNT || !handlers[opcode])) {
+    cpu->flags |= FLAG_HALTED;
+    return CPU_HALTED;
+  }
+
+  // Special case: Branch instruction uses condition, not mode
+  if (opcode == OPCODE_B) {
+    // Don't validate mode for branch - it's actually a condition
+  } else {
+    // Validate mode for all other instructions
+    if (UNLIKELY(mode >= MODE_COUNT)) {
+      cpu->flags |= FLAG_HALTED;
+      return CPU_HALTED;
+    }
+  }
+
+  /* Fetch operand (still one byte) */
+  uint8_t operand = cpu->memory[cpu->PC++];
+
+  // Execute instruction - no return value overhead!
+  handlers[opcode](cpu, mode, operand);
+  return (cpu->flags & FLAG_HALTED) ? CPU_HALTED : CPU_OK;
 }
 
 /* cpu_run that accepts a step-function pointer.
@@ -830,37 +611,17 @@ static inline int cpu_step(CPU *cpu) {
 static inline void cpu_run(CPU *cpu, cpu_step_fn step) {
   int result;
   while (1) {
-    uint8_t prev_pc = cpu->PC;     /* instruction start (for reporting) */
+    uint8_t prev_pc = cpu->PC; /* instruction start (for reporting) */
     result = step(cpu);
 
-    if (result == CPU_HALT) {
+    if (UNLIKELY(result == CPU_HALTED)) {
       printf("CPU HALTED at PC=0x%02X\n", prev_pc);
       break;
-    } else if (result == CPU_ERROR) {
+    } else if (UNLIKELY(result == CPU_HALTED)) {
       printf("CPU ERROR at PC=0x%02X\n", prev_pc);
       break;
     }
   }
-}
-
-static inline int cpu_step_packed(CPU *cpu) {
-
-  /* Fetch packed byte */
-  uint8_t packed = cpu->memory[cpu->PC++];
-
-  uint8_t opcode = UNPACK_OPCODE(packed);
-  uint8_t mode = UNPACK_MODE(packed);
-
-  if (opcode >= OPCODE_COUNT || !handlers[opcode])
-    return CPU_ERROR;
-
-  if (opcode == OPCODE_HALT)
-    return CPU_HALT;
-
-  /* Fetch operand (still one byte) */
-  uint8_t operand = cpu->memory[cpu->PC++];
-
-  return handlers[opcode](cpu, mode, operand);
 }
 
 #endif // CPU_H
