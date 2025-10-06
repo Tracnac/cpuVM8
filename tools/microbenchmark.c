@@ -279,14 +279,11 @@ static uint64_t run_with_step(const CPU *template_cpu, step_fn step,
                 next_debug_step += dbg_interval;
             }
 
-            if (res == CPU_HALT) {
-                total_halts++;
-                break;
-            } else if (res == CPU_ERROR) {
+            if (res == CPU_HALTED) {
                 total_errors++;
                 if (dbg_enabled) {
                     uint8_t pc_show = cpu.PC;
-                    printf("[dbg] CPU_ERROR at PC=0x%02X\n", pc_show);
+                    printf("[dbg] CPU_HALTED at PC=0x%02X\n", pc_show);
                     printf("[dbg] mem@PC: %02X %02X %02X\n",
                            cpu.memory[pc_show],
                            cpu.memory[(uint8_t)(pc_show + 1)],
