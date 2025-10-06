@@ -19,7 +19,7 @@ void initCPU_test(void) {
     TEST_ASSERT_FALSE(cpu.flags & FLAG_ZERO);
     TEST_ASSERT_FALSE(cpu.flags & FLAG_NEGATIVE);
     TEST_ASSERT_FALSE(cpu.flags & FLAG_OVERFLOW);
-    TEST_ASSERT_FALSE(cpu.flags & FLAG_ERROR);
+    TEST_ASSERT_FALSE(cpu.flags & FLAG_HALTED);
 
     // Test that setting each flag is detected
     cpu.flags = FLAG_CARRY;
@@ -30,6 +30,6 @@ void initCPU_test(void) {
     TEST_ASSERT_TRUE(cpu.flags & FLAG_NEGATIVE);
     cpu.flags = FLAG_OVERFLOW;
     TEST_ASSERT_TRUE(cpu.flags & FLAG_OVERFLOW);
-    cpu.flags = FLAG_ERROR;
-    TEST_ASSERT_TRUE(cpu.flags & FLAG_ERROR);
+    cpu.flags = FLAG_HALTED;
+    TEST_ASSERT_TRUE(cpu.flags & FLAG_HALTED);
 }

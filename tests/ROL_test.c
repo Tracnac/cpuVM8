@@ -126,8 +126,8 @@ void ROL_test(void) {
     cpu.memory[0] = OPCODE_ROL;
     cpu.memory[1] = 0xFF;  // Invalid mode
     cpu.memory[2] = 0x00;
-    TEST_ASSERT_EQUAL_INT(CPU_ERROR, cpu_step(&cpu));
-    TEST_ASSERT_TRUE(cpu.flags & FLAG_ERROR);
+    TEST_ASSERT_EQUAL_INT(CPU_HALTED, cpu_step(&cpu));
+    TEST_ASSERT_TRUE(cpu.flags & FLAG_HALTED);
 
     // Test 10: ROL chain test - multiple rotations
     initCPU(&cpu);

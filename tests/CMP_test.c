@@ -3,7 +3,7 @@
 
 void CMP_test(void) {
     CPU cpu;
-    
+
     // Test 1: CMP immediate - equal values (A = operand)
     initCPU(&cpu);
     cpu.PC = 0;
@@ -17,7 +17,7 @@ void CMP_test(void) {
     TEST_ASSERT_TRUE(cpu.flags & FLAG_CARRY);    // C=1 (no borrow)
     TEST_ASSERT_FALSE(cpu.flags & FLAG_NEGATIVE); // N=0 (result is 0)
     TEST_ASSERT_FALSE(cpu.flags & FLAG_OVERFLOW); // V=0
-    
+
     // Test 2: CMP immediate - A > operand
     initCPU(&cpu);
     cpu.PC = 0;
@@ -31,7 +31,7 @@ void CMP_test(void) {
     TEST_ASSERT_TRUE(cpu.flags & FLAG_CARRY);     // C=1 (no borrow)
     TEST_ASSERT_FALSE(cpu.flags & FLAG_NEGATIVE); // N=0 (positive result)
     TEST_ASSERT_FALSE(cpu.flags & FLAG_OVERFLOW); // V=0
-    
+
     // Test 3: CMP immediate - A < operand (borrow occurs)
     initCPU(&cpu);
     cpu.PC = 0;
@@ -45,7 +45,7 @@ void CMP_test(void) {
     TEST_ASSERT_FALSE(cpu.flags & FLAG_CARRY);    // C=0 (borrow occurred)
     TEST_ASSERT_TRUE(cpu.flags & FLAG_NEGATIVE);  // N=1 (negative result)
     TEST_ASSERT_FALSE(cpu.flags & FLAG_OVERFLOW); // V=0
-    
+
     // Test 4: CMP immediate - signed overflow case
     initCPU(&cpu);
     cpu.PC = 0;
@@ -59,7 +59,7 @@ void CMP_test(void) {
     TEST_ASSERT_TRUE(cpu.flags & FLAG_CARRY);     // C=1 (no unsigned borrow)
     TEST_ASSERT_FALSE(cpu.flags & FLAG_NEGATIVE); // N=0 (0x7F is positive)
     TEST_ASSERT_TRUE(cpu.flags & FLAG_OVERFLOW);  // V=1 (signed overflow)
-    
+
     // Test 5: CMP absolute addressing
     initCPU(&cpu);
     cpu.PC = 0;
@@ -74,7 +74,7 @@ void CMP_test(void) {
     TEST_ASSERT_TRUE(cpu.flags & FLAG_CARRY);     // No borrow
     TEST_ASSERT_FALSE(cpu.flags & FLAG_NEGATIVE);
     TEST_ASSERT_FALSE(cpu.flags & FLAG_OVERFLOW);
-    
+
     // Test 6: CMP indexed addressing
     initCPU(&cpu);
     cpu.PC = 0;
@@ -89,7 +89,7 @@ void CMP_test(void) {
     TEST_ASSERT_FALSE(cpu.flags & FLAG_ZERO);     // 0x77 != 0x88
     TEST_ASSERT_FALSE(cpu.flags & FLAG_CARRY);    // Borrow occurred
     TEST_ASSERT_TRUE(cpu.flags & FLAG_NEGATIVE);  // Negative result
-    
+
     // Test 7: CMP indirect addressing
     initCPU(&cpu);
     cpu.PC = 0;
@@ -105,7 +105,7 @@ void CMP_test(void) {
     TEST_ASSERT_TRUE(cpu.flags & FLAG_CARRY);
     TEST_ASSERT_FALSE(cpu.flags & FLAG_NEGATIVE);
     TEST_ASSERT_FALSE(cpu.flags & FLAG_OVERFLOW);
-    
+
     // Test 8: CMP indirect indexed addressing
     initCPU(&cpu);
     cpu.PC = 0;
@@ -122,7 +122,7 @@ void CMP_test(void) {
     TEST_ASSERT_TRUE(cpu.flags & FLAG_CARRY);
     TEST_ASSERT_FALSE(cpu.flags & FLAG_NEGATIVE);
     TEST_ASSERT_FALSE(cpu.flags & FLAG_OVERFLOW);
-    
+
     // Test 9: CMP with invalid addressing mode
     initCPU(&cpu);
     cpu.PC = 0;
@@ -130,10 +130,10 @@ void CMP_test(void) {
     cpu.memory[0] = OPCODE_CMP;
     cpu.memory[1] = 0xFF;  // Invalid mode
     cpu.memory[2] = 0x22;
-    TEST_ASSERT_EQUAL_INT(CPU_ERROR, cpu_step(&cpu));
-    TEST_ASSERT_TRUE(cpu.flags & FLAG_ERROR);
+    TEST_ASSERT_EQUAL_INT(CPU_HALTED, cpu_step(&cpu));
+    TEST_ASSERT_TRUE(cpu.flags & FLAG_HALTED);
     TEST_ASSERT_EQUAL_UINT8(0x11, cpu.A);  // A should be unchanged
-    
+
     // Test 10: CMP with zero result (boundary case)
     initCPU(&cpu);
     cpu.PC = 0;
@@ -147,7 +147,7 @@ void CMP_test(void) {
     TEST_ASSERT_TRUE(cpu.flags & FLAG_CARRY);     // No borrow
     TEST_ASSERT_FALSE(cpu.flags & FLAG_NEGATIVE);
     TEST_ASSERT_FALSE(cpu.flags & FLAG_OVERFLOW);
-    
+
     // Test 11: CMP creating maximum negative result
     initCPU(&cpu);
     cpu.PC = 0;
@@ -161,7 +161,7 @@ void CMP_test(void) {
     TEST_ASSERT_FALSE(cpu.flags & FLAG_CARRY);    // Borrow occurred
     TEST_ASSERT_TRUE(cpu.flags & FLAG_NEGATIVE);  // 0xFF is negative
     TEST_ASSERT_FALSE(cpu.flags & FLAG_OVERFLOW);
-    
+
     // Test 12: CMP that would cause SUB overflow (signed)
     initCPU(&cpu);
     cpu.PC = 0;

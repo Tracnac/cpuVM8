@@ -118,8 +118,8 @@ void SHR_test(void) {
     cpu.memory[0] = OPCODE_SHR;
     cpu.memory[1] = 0xFF;  // Invalid mode
     cpu.memory[2] = 0x00;
-    TEST_ASSERT_EQUAL_INT(CPU_ERROR, cpu_step(&cpu));
-    TEST_ASSERT_TRUE(cpu.flags & FLAG_ERROR);
+    TEST_ASSERT_EQUAL_INT(CPU_HALTED, cpu_step(&cpu));
+    TEST_ASSERT_TRUE(cpu.flags & FLAG_HALTED);
 
     // Test 10: SHR chain test - divide by powers of 2
     initCPU(&cpu);

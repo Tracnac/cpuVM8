@@ -1,4 +1,5 @@
 #include "cpuvm8.h"
+#include "cpu.h"
 
 int main(int argc, char *argv[]) {
 
@@ -32,12 +33,8 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < INSTR_COUNT; i++) {
 
     status = cpu_step(&cpu);
-    if (status == CPU_ERROR) {
+    if (status == CPU_HALTED) {
       printf("CPU ERROR at PC=0x%02X\n", cpu.PC - 3);
-      dump_cpu(&cpu);
-      break;
-    } else if (status == CPU_HALT) {
-      printf("CPU HALTED at PC=0x%02X\n", cpu.PC - 1);
       dump_cpu(&cpu);
       break;
     }
@@ -64,7 +61,7 @@ int main(int argc, char *argv[]) {
       (now.tv_sec - start.tv_sec) + (now.tv_nsec - start.tv_nsec) / 1e9;
   double mips = (double)INSTR_COUNT / (total_elapsed * 1e6);
 
-  if (status != CPU_ERROR) {
+  if (status != CPU_HALTED) {
     if (benchmark) {
       printf("Benchmark: %d instructions...\n", INSTR_COUNT);
       printf("Simulating CPU at %.2f MHz\n", freq_mhz);
@@ -93,7 +90,7 @@ void dump_cpu(const CPU *cpu) {
     printf(" NEG");
   if (cpu->flags & FLAG_OVERFLOW)
     printf(" OVF");
-  if (cpu->flags & FLAG_ERROR)
+  if (cpu->flags & FLAG_HALTED)
     printf(" ERROR");
   printf("\n");
 
