@@ -25,6 +25,7 @@ CFLAGS += -MMD -MP
 APP_SRCS = cpuvm8.c
 
 LIB_SRCS = cpu.c
+BENCH_SRCS = benchmark.c
 SRCS = $(LIB_SRCS) $(APP_SRCS)
 
 BUILD_DIR = build/$(BUILD)
@@ -35,6 +36,7 @@ OBJS = $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRCS))
 DEPS = $(patsubst %.c,$(OBJ_DIR)/%.d,$(SRCS))
 
 TARGET = $(BIN_DIR)/cpuvm8
+BENCH_TARGET = $(BIN_DIR)/benchmark
 
 # --- TESTS AUTOMATION ---
 # Find all test source files matching *_test.c
@@ -56,7 +58,7 @@ TEST_BIN = $(BIN_DIR)/cpuVM8_test
 # Include auto-generated header dependency files (if present)
 -include $(DEPS)
 
-.PHONY: all clean run tests help status debug release debug-tests release-tests debug-run release-run
+.PHONY: all clean run tests benchmark help status debug release tests-debug tests-release run-debug run-release benchmark-debug benchmark-release
 
 all: $(TARGET)
 
@@ -93,26 +95,34 @@ run: $(TARGET)
 tests: $(TEST_BIN)
 	./$(TEST_BIN)
 
+# Benchmark targets
+$(BENCH_TARGET): benchmark.c | $(BIN_DIR)
+	$(CC) $(CFLAGS) -o $@ $<
+
+benchmark: $(BENCH_TARGET)
+	./$(BENCH_TARGET)
+
 help:
+	@echo ""
 	@echo "Available targets:"
 	@echo "  all          - Build main application (default)"
 	@echo "  tests        - Build and run tests"
+	@echo "  benchmark    - Build and run performance benchmark"
 	@echo "  run          - Build and run main application"
 	@echo "  clean        - Remove all build directories"
 	@echo "  status       - Show current build configuration"
 	@echo "  help         - Show this help message"
 	@echo ""
 	@echo "Easy build mode shortcuts:"
-	@echo "  debug        - Build main app in debug mode"
-	@echo "  release      - Build main app in release mode"
-	@echo "  debug-tests  - Build and run tests in debug mode"
-	@echo "  release-tests- Build and run tests in release mode"
-	@echo "  debug-run    - Build and run main app in debug mode"
-	@echo "  release-run  - Build and run main app in release mode"
+	@echo "  debug              - Build main app in debug mode"
+	@echo "  release            - Build main app in release mode"
+	@echo "  tests-debug        - Build and run tests in debug mode"
+	@echo "  tests-release      - Build and run tests in release mode"
+	@echo "  benchmark-debug    - Build and run benchmark in debug mode"
+	@echo "  benchmark-release  - Build and run benchmark in release mode"
+	@echo "  run-debug          - Build and run main app in debug mode"
+	@echo "  run-release        - Build and run main app in release mode"
 	@echo ""
-	@echo "Advanced (manual BUILD flag):"
-	@echo "  make BUILD=debug all"
-	@echo "  make BUILD=release tests"
 
 status:
 	@echo "=== BUILD STATUS ==="
@@ -120,10 +130,12 @@ status:
 	@echo "DEBUG BUILD:"
 	@if [ -f "build/debug/bin/cpuvm8" ]; then echo "  ✓ Main binary: build/debug/bin/cpuvm8"; else echo "  ✗ Main binary: not built"; fi
 	@if [ -f "build/debug/bin/cpuVM8_test" ]; then echo "  ✓ Test binary: build/debug/bin/cpuVM8_test"; else echo "  ✗ Test binary: not built"; fi
+	@if [ -f "build/debug/bin/benchmark" ]; then echo "  ✓ Benchmark binary: build/debug/bin/benchmark"; else echo "  ✗ Benchmark binary: not built"; fi
 	@echo ""
 	@echo "RELEASE BUILD:"
 	@if [ -f "build/release/bin/cpuvm8" ]; then echo "  ✓ Main binary: build/release/bin/cpuvm8"; else echo "  ✗ Main binary: not built"; fi
 	@if [ -f "build/release/bin/cpuVM8_test" ]; then echo "  ✓ Test binary: build/release/bin/cpuVM8_test"; else echo "  ✗ Test binary: not built"; fi
+	@if [ -f "build/release/bin/benchmark" ]; then echo "  ✓ Benchmark binary: build/release/bin/benchmark"; else echo "  ✗ Benchmark binary: not built"; fi
 	@echo ""
 	@echo "Default build mode for 'make' commands: $(BUILD)"
 
@@ -134,14 +146,20 @@ debug:
 release:
 	$(MAKE) BUILD=release all
 
-debug-tests:
+tests-debug:
 	$(MAKE) BUILD=debug tests
 
-release-tests:
+tests-release:
 	$(MAKE) BUILD=release tests
 
-debug-run:
+run-debug:
 	$(MAKE) BUILD=debug run
 
-release-run:
+run-release:
 	$(MAKE) BUILD=release run
+
+benchmark-debug:
+	$(MAKE) BUILD=debug benchmark
+
+benchmark-release:
+	$(MAKE) BUILD=release benchmark
